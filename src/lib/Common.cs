@@ -422,10 +422,7 @@ namespace sttp
                 return true;
 
             if (item is char || item is string)
-            {
-                double result;
-                return double.TryParse(item.ToString(), out result);
-            }
+                return double.TryParse(item.ToString(), out double _);
 
             return false;
         }

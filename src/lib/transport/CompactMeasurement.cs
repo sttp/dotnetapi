@@ -5,10 +5,10 @@
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,20 +16,12 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  08/23/2010 - J. Ritchie Carroll
-//       Generated original version of source code.
-//  05/15/2011 - J. Ritchie Carroll
-//       Added runtime size optimizations.
-//  06/07/2011 - J. Ritchie Carroll
-//       Implemented initialize issue fix as found and proposed by Luc Cezard.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
 using System;
-using GSF;
-using GSF.Parsing;
-using GSF.TimeSeries;
-using GSF.TimeSeries.Transport;
 
 namespace sttp.transport
 {
@@ -157,13 +149,7 @@ namespace sttp.transport
     /// <summary>
     /// Represents a <see cref="IMeasurement"/> that can be serialized with minimal size.
     /// </summary>
-    /// <remarks>
-    /// This measurement implementation is serialized through <see cref="ISupportBinaryImage"/>
-    /// to allow complete control of binary format. Only critical measurements properties are
-    /// serialized and every attempt is made to optimize the binary image for purposes of size
-    /// reduction.
-    /// </remarks>
-    public class CompactMeasurement : Measurement, IBinaryMeasurement
+    public class CompactMeasurement : Measurement
     {
         #region [ Members ]
 
@@ -342,12 +328,8 @@ namespace sttp.transport
             set
             {
                 // Attempt to restore signal identification
-                MeasurementKey key;
-
-                if (m_signalIndexCache.Reference.TryGetValue(value, out key))
-                {
+                if (m_signalIndexCache.Reference.TryGetValue(value, out MeasurementKey key))
                     Metadata = key.Metadata;
-                }
                 else
                     throw new InvalidOperationException("Failed to find associated signal identification for runtime ID " + value);
             }
@@ -425,16 +407,12 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Generates binary image of the <see cref="CompactMeasurement"/> and copies it into the given buffer, for <see cref="ISupportBinaryImage.BinaryLength"/> bytes.
+        /// Generates binary image of the <see cref="CompactMeasurement"/> and copies it into the given buffer.
         /// </summary>
         /// <param name="buffer">Buffer used to hold generated binary image of the source object.</param>
         /// <param name="startIndex">0-based starting index in the <paramref name="buffer"/> to start writing.</param>
         /// <returns>The number of bytes written to the <paramref name="buffer"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// <paramref name="startIndex"/> or <see cref="ISupportBinaryImage.BinaryLength"/> is less than 0 -or- 
-        /// <paramref name="startIndex"/> and <see cref="ISupportBinaryImage.BinaryLength"/> will exceed <paramref name="buffer"/> length.
-        /// </exception>
         /// <remarks>
         /// <para>
         /// Field:     Bytes: <br/>

@@ -5,10 +5,10 @@
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,8 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  05/15/2011 - J. Ritchie Carroll
-//       Generated original version of source code.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -27,10 +27,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
-using GSF;
-using GSF.Collections;
-using GSF.Parsing;
-using GSF.TimeSeries;
 
 #pragma warning disable 618
 
@@ -48,7 +44,7 @@ namespace sttp.transport
     /// runtime signal index cache could be established if this is a limitation for a given data set.
     /// </remarks>
     [Serializable]
-    public class SignalIndexCache : ISupportBinaryImage
+    public class SignalIndexCache
     {
         #region [ Members ]
 
@@ -65,7 +61,7 @@ namespace sttp.transport
         /// Lookups MeasurementKey.RuntimeID and returns int SignalIndex. -1 means it does not exist.
         /// </summary>
         [NonSerialized] // SignalID reverse lookup runtime cache (used to speed deserialization)
-        private IndexedArray<int> m_signalIDCache;
+        private Dictionary<int, int> m_signalIDCache;
 
         [NonSerialized]
         private Encoding m_encoding;
@@ -80,7 +76,7 @@ namespace sttp.transport
         public SignalIndexCache()
         {
             m_reference = new ConcurrentDictionary<int, MeasurementKey>();
-            m_signalIDCache = new IndexedArray<int>(-1);
+            m_signalIDCache = new Dictionary<int, int>();
         }
 
         /// <summary>
@@ -143,11 +139,10 @@ namespace sttp.transport
             set
             {
                 m_reference = value;
-                IndexedArray<int> signalIDCache = new IndexedArray<int>(-1);
-                foreach (var pair in value)
-                {
+                Dictionary<int, int> signalIDCache = new Dictionary<int, int>();
+
+                foreach (KeyValuePair<int, MeasurementKey> pair in value)
                     signalIDCache[pair.Value.RuntimeID] = pair.Key;
-                }
 
                 m_signalIDCache = signalIDCache;
             }
@@ -275,7 +270,7 @@ namespace sttp.transport
             offset += bigEndianBuffer.Length;
 
             // Subscriber ID
-            bigEndianBuffer = m_subscriberID.ToRfcBytes();
+            bigEndianBuffer = m_subscriberID.ToRFCBytes();
             Buffer.BlockCopy(bigEndianBuffer, 0, buffer, offset, bigEndianBuffer.Length);
             offset += bigEndianBuffer.Length;
 
@@ -292,7 +287,7 @@ namespace sttp.transport
                 offset += bigEndianBuffer.Length;
 
                 // Signal ID
-                bigEndianBuffer = kvp.Value.SignalID.ToRfcBytes();
+                bigEndianBuffer = kvp.Value.SignalID.ToRFCBytes();
                 Buffer.BlockCopy(bigEndianBuffer, 0, buffer, offset, bigEndianBuffer.Length);
                 offset += bigEndianBuffer.Length;
 
@@ -318,7 +313,7 @@ namespace sttp.transport
             foreach (Guid signalID in unauthorizedSignalIDs)
             {
                 // Unauthorized ID
-                bigEndianBuffer = signalID.ToRfcBytes();
+                bigEndianBuffer = signalID.ToRFCBytes();
                 Buffer.BlockCopy(bigEndianBuffer, 0, buffer, offset, bigEndianBuffer.Length);
                 offset += bigEndianBuffer.Length;
             }
@@ -366,7 +361,7 @@ namespace sttp.transport
             m_reference.Clear();
 
             // Subscriber ID
-            m_subscriberID = EndianOrder.BigEndian.ToGuid(buffer, offset);
+            m_subscriberID = buffer.FromRFCGuid(offset);
             offset += 16;
 
             // Number of references
@@ -380,7 +375,7 @@ namespace sttp.transport
                 offset += 4;
 
                 // Signal ID
-                signalID = EndianOrder.BigEndian.ToGuid(buffer, offset);
+                signalID = buffer.FromRFCGuid(offset);
                 offset += 16;
 
                 // Source
@@ -404,7 +399,7 @@ namespace sttp.transport
             for (int i = 0; i < unauthorizedIDCount; i++)
             {
                 // Unauthorized ID
-                m_unauthorizedSignalIDs[i] = EndianOrder.BigEndian.ToGuid(buffer, offset);
+                m_unauthorizedSignalIDs[i] = buffer.FromRFCGuid(offset);
                 offset += 16;
             }
 

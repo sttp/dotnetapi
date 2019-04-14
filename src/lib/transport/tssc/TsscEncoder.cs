@@ -22,10 +22,9 @@
 //******************************************************************************************************
 
 using System;
-using GSF;
-using GSF.Collections;
+using System.Collections.Generic;
 
-namespace sttp.tssc
+namespace sttp.transport.tssc
 {
     /// <summary>
     /// An encoder for the TSSC protocol.
@@ -54,7 +53,7 @@ namespace sttp.tssc
         private long m_prevTimeDelta4;
 
         private TsscPointMetadata m_lastPoint;
-        private IndexedArray<TsscPointMetadata> m_points;
+        private List<TsscPointMetadata> m_points;
 
         /// <summary>
         /// Creates a encoder for the TSSC protocol.
@@ -75,9 +74,9 @@ namespace sttp.tssc
         /// </remarks>
         public void Reset()
         {
-            m_points = new IndexedArray<TsscPointMetadata>();
+            m_points = new List<TsscPointMetadata>();
             m_lastPoint = new TsscPointMetadata(WriteBits, null, null);
-            m_data = EmptyArray<byte>.Empty;
+            m_data = new byte[0];
             m_position = 0;
             m_lastPosition = 0;
             ClearBitStream();
@@ -131,11 +130,17 @@ namespace sttp.tssc
             if (m_lastPosition - m_position < 100)
                 return false;
 
-            TsscPointMetadata point = m_points[id];
+            TsscPointMetadata point = id >= m_points.Count ? null : m_points[id];
+
             if (point == null)
             {
                 point = new TsscPointMetadata(WriteBits, null, null);
+
+                while (id >= m_points.Count)
+                    m_points.Add(null);
+
                 point.PrevNextPointId1 = id + 1;
+
                 m_points[id] = point;
             }
 

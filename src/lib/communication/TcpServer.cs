@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  TcpServer.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,34 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  06/02/2006 - Pinal C. Patel
-//       Original version of source code generated.
-//  09/06/2006 - J. Ritchie Carroll
-//       Added bypass optimizations for high-speed socket access.
-//  12/01/2006 - Pinal C. Patel
-//       Modified code for handling "PayloadAware" transmissions.
-//  01/28/3008 - J. Ritchie Carroll
-//       Placed accepted TCP socket connections on their own threads instead of thread pool.
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  07/17/2009 - Pinal C. Patel
-//       Added support to specify a specific interface address on a multiple interface machine.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  10/14/2009 - Pinal C. Patel
-//       Added null reference check to DisconnectOne() for safety.
-//  02/11/2011 - Pinal C. Patel
-//       Added IntegratedSecurity property to enable integrated windows authentication.
-//  09/21/2011 - J. Ritchie Carroll
-//       Added Mono implementation exception regions.
-//  12/04/2011 - J. Ritchie Carroll
-//       Modified to use concurrent dictionary.
-//  07/23/2012 - Stephen C. Wills
-//       Performed a full refactor to use the SocketAsyncEventArgs API calls.
-//  10/31/2012 - Stephen C. Wills
-//       Replaced single-threaded BlockingCollection pattern with asynchronous loop pattern.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//       Modified Header.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -62,8 +36,7 @@ using System.Threading;
 using System.Net.Security;
 using System.Security.Authentication;
 #endif
-using GSF.Configuration;
-using GSF.Threading;
+using sttp.threading;
 
 namespace sttp.communication
 {
@@ -450,10 +423,9 @@ namespace sttp.communication
         {
             buffer.ValidateParameters(startIndex, length);
 
-            TcpClientInfo clientInfo;
             TransportProvider<Socket> tcpClient;
 
-            if (m_clientInfoLookup.TryGetValue(clientID, out clientInfo))
+            if (m_clientInfoLookup.TryGetValue(clientID, out TcpClientInfo clientInfo))
             {
                 tcpClient = clientInfo.Client;
 
@@ -479,50 +451,6 @@ namespace sttp.communication
             }
 
             throw new InvalidOperationException("Specified client ID does not exist, cannot read buffer.");
-        }
-
-        /// <summary>
-        /// Saves <see cref="TcpServer"/> settings to the config file if the <see cref="ServerBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void SaveSettings()
-        {
-            base.SaveSettings();
-            if (PersistSettings)
-            {
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings["PayloadAware", true].Update(m_payloadAware);
-                settings["IntegratedSecurity", true].Update(m_integratedSecurity);
-                settings["AllowDualStackSocket", true].Update(m_allowDualStackSocket);
-                settings["MaxSendQueueSize", true].Update(m_maxSendQueueSize);
-                settings["NoDelay", true].Update(m_noDelay);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved <see cref="TcpServer"/> settings from the config file if the <see cref="ServerBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void LoadSettings()
-        {
-            base.LoadSettings();
-            if (PersistSettings)
-            {
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings.Add("PayloadAware", m_payloadAware, "True if payload boundaries are to be preserved during transmission, otherwise False.");
-                settings.Add("IntegratedSecurity", m_integratedSecurity, "True if the client Windows account credentials are used for authentication, otherwise False.");
-                settings.Add("AllowDualStackSocket", m_allowDualStackSocket, "True if dual-mode socket is allowed when IP address is IPv6, otherwise False.");
-                settings.Add("MaxSendQueueSize", m_maxSendQueueSize, "The maximum size of the send queue before payloads are dumped from the queue.");
-                settings.Add("NoDelay", m_noDelay, "True to disable Nagle so that small packets are delivered to the remote host without delay, otherwise False.");
-                PayloadAware = settings["PayloadAware"].ValueAs(m_payloadAware);
-                IntegratedSecurity = settings["IntegratedSecurity"].ValueAs(m_integratedSecurity);
-                AllowDualStackSocket = settings["AllowDualStackSocket"].ValueAs(m_allowDualStackSocket);
-                MaxSendQueueSize = settings["MaxSendQueueSize"].ValueAs(m_maxSendQueueSize);
-                NoDelay = settings["NoDelay"].ValueAs(m_noDelay);
-            }
         }
 
         /// <summary>
@@ -607,9 +535,7 @@ namespace sttp.communication
         /// <exception cref="InvalidOperationException">Client does not exist for the specified <paramref name="clientID"/>.</exception>
         public override void DisconnectOne(Guid clientID)
         {
-            TransportProvider<Socket> client;
-
-            if (!TryGetClient(clientID, out client))
+            if (!TryGetClient(clientID, out TransportProvider<Socket> client))
                 return;
 
             try
@@ -634,8 +560,7 @@ namespace sttp.communication
         /// <returns>A <see cref="TransportProvider{Socket}"/> object.</returns>
         public bool TryGetClient(Guid clientID, out TransportProvider<Socket> tcpClient)
         {
-            TcpClientInfo clientInfo;
-            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out clientInfo);
+            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out TcpClientInfo clientInfo);
 
             if (clientExists)
                 tcpClient = clientInfo.Client;
@@ -653,8 +578,7 @@ namespace sttp.communication
         /// <returns>A <see cref="WindowsPrincipal"/> object.</returns>
         public bool TryGetClientPrincipal(Guid clientID, out WindowsPrincipal clientPrincipal)
         {
-            TcpClientInfo clientInfo;
-            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out clientInfo);
+            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out TcpClientInfo clientInfo);
 
             if (clientExists)
                 clientPrincipal = clientInfo.ClientPrincipal;
@@ -694,14 +618,12 @@ namespace sttp.communication
         /// <returns><see cref="WaitHandle"/> for the asynchronous operation.</returns>
         protected override WaitHandle SendDataToAsync(Guid clientID, byte[] data, int offset, int length)
         {
-            TcpClientInfo clientInfo;
             ConcurrentQueue<TcpServerPayload> sendQueue;
-            TcpServerPayload dequeuedPayload;
 
             TcpServerPayload payload;
             ManualResetEventSlim handle;
 
-            if (!m_clientInfoLookup.TryGetValue(clientID, out clientInfo))
+            if (!m_clientInfoLookup.TryGetValue(clientID, out TcpClientInfo clientInfo))
                 throw new InvalidOperationException($"No client found for ID {clientID}.");
 
             sendQueue = clientInfo.SendQueue;
@@ -732,7 +654,7 @@ namespace sttp.communication
                 // Send next queued payload.
                 if (Interlocked.CompareExchange(ref clientInfo.Sending, 1, 0) == 0)
                 {
-                    if (sendQueue.TryDequeue(out dequeuedPayload))
+                    if (sendQueue.TryDequeue(out TcpServerPayload dequeuedPayload))
                         ThreadPool.QueueUserWorkItem(state => SendPayload((TcpServerPayload)state), dequeuedPayload);
                     else
                         Interlocked.Exchange(ref clientInfo.Sending, 0);
@@ -851,8 +773,8 @@ namespace sttp.communication
                         if (!timeoutToken.Cancel())
                             throw new SocketException((int)SocketError.TimedOut);
 
-                        if (authenticationStream.RemoteIdentity is WindowsIdentity)
-                            clientPrincipal = new WindowsPrincipal((WindowsIdentity)authenticationStream.RemoteIdentity);
+                        if (authenticationStream.RemoteIdentity is WindowsIdentity identity)
+                            clientPrincipal = new WindowsPrincipal(identity);
                     }
                     catch (InvalidCredentialException)
                     {
@@ -888,14 +810,12 @@ namespace sttp.communication
                     // Create operation to dump send queue payloads when the queue grows too large.
                     clientInfo.DumpPayloadsOperation = new ShortSynchronizedOperation(() =>
                     {
-                        TcpServerPayload payload;
-
                         // Check to see if the client has reached the maximum send queue size.
                         if (m_maxSendQueueSize > 0 && clientInfo.SendQueue.Count >= m_maxSendQueueSize)
                         {
                             for (int i = 0; i < m_maxSendQueueSize; i++)
                             {
-                                if (clientInfo.SendQueue.TryDequeue(out payload))
+                                if (clientInfo.SendQueue.TryDequeue(out TcpServerPayload payload))
                                 {
                                     payload.WaitHandle.Set();
                                     payload.WaitHandle.Dispose();
@@ -1003,7 +923,7 @@ namespace sttp.communication
             TcpClientInfo clientInfo = null;
             TransportProvider<Socket> client = null;
             ConcurrentQueue<TcpServerPayload> sendQueue = null;
-            ManualResetEventSlim handle = null;
+            ManualResetEventSlim handle;
 
             try
             {
@@ -1277,11 +1197,9 @@ namespace sttp.communication
         /// </summary>
         private void TerminateConnection(TransportProvider<Socket> client, SocketAsyncEventArgs args, bool raiseEvent)
         {
-            TcpClientInfo clientInfo;
-
             try
             {
-                if (m_clientInfoLookup.TryRemove(client.ID, out clientInfo))
+                if (m_clientInfoLookup.TryRemove(client.ID, out TcpClientInfo clientInfo))
                 {
                     client.Reset();
                     clientInfo.SendArgs.Dispose();

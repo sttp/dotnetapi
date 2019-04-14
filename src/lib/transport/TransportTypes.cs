@@ -16,8 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  04/12/2019 - J. Ritchie Carroll
-//       Generated original version of source code.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -34,7 +34,7 @@ namespace sttp.transport
     /// <remarks>
     /// This interface abstractly represents a measured value at an exact time interval.
     /// </remarks>
-    public interface IMeasurement: IComparable
+    public interface IMeasurement : IComparable
     {
         /// <summary>
         /// Gets or sets associated metadata values for the <see cref="IMeasurement"/> .
@@ -44,7 +44,7 @@ namespace sttp.transport
             get;
             set;
         }
-        
+
         /// <summary>
         /// Gets or sets the <see cref="Guid"/> based signal ID of this <see cref="IMeasurement"/>.
         /// </summary>
@@ -75,7 +75,7 @@ namespace sttp.transport
             get;
             set;
         }
-        
+
         /// <summary>
         /// Gets or sets the raw typed value of this <see cref="IMeasurement"/>.
         /// </summary>
@@ -275,7 +275,7 @@ namespace sttp.transport
             m_id = id;
             m_source = source;
             m_hashCode = base.GetHashCode();
-            m_runtimeID = Interlocked.Increment(ref s_nextRuntimeID) - 1; // Returns the incremented value. Hints the -1
+            m_runtimeID = Interlocked.Increment(ref s_nextRuntimeID) - 1;
             m_metadata = new MeasurementMetadata(this, null, 0, 1);
         }
 
@@ -335,10 +335,14 @@ namespace sttp.transport
         public void SetMeasurementMetadata(string tagName, double adder, double multiplier)
         {
             if (this == Undefined)
+            {
                 throw new NotSupportedException("Cannot set data source information for an undefined measurement.");
+            }
 
             if (m_metadata.TagName != tagName || m_metadata.Adder != adder || m_metadata.Multiplier != multiplier)
+            {
                 m_metadata = new MeasurementMetadata(this, tagName, adder, multiplier);
+            }
         }
 
         /// <summary>
@@ -397,7 +401,9 @@ namespace sttp.transport
         public static MeasurementKey CreateOrUpdate(Guid signalID, string value)
         {
             if (!TrySplit(value, out string source, out ulong id))
+            {
                 throw new FormatException("The value is not in the correct format for a MeasurementKey value");
+            }
 
             return CreateOrUpdate(signalID, source, id);
         }
@@ -416,10 +422,14 @@ namespace sttp.transport
             Func<Guid, MeasurementKey, MeasurementKey> updateValueFactory;
 
             if (signalID == Guid.Empty)
+            {
                 throw new ArgumentException("Unable to update undefined measurement key", nameof(signalID));
+            }
 
             if (string.IsNullOrWhiteSpace(source))
+            {
                 throw new ArgumentNullException(nameof(source), "MeasurementKey source cannot be null or empty");
+            }
 
             addValueFactory = guid =>
             {
@@ -435,7 +445,9 @@ namespace sttp.transport
                 // If existing measurement key is exactly the same as the
                 // one we are trying to create, simply return that key
                 if (key.ID == id && key.Source == source)
+                {
                     return key;
+                }
 
                 // Update source and ID and re-insert it into the KeyCache
                 key.m_source = source;
@@ -523,9 +535,13 @@ namespace sttp.transport
 
             // ReSharper disable once InconsistentlySynchronizedField
             if (signalID == Guid.Empty)
+            {
                 key = Undefined;
+            }
             else if (!s_idCache.TryGetValue(signalID, out key))
+            {
                 key = Undefined;
+            }
 
             return key;
         }
@@ -543,10 +559,14 @@ namespace sttp.transport
         public static MeasurementKey LookUpBySource(string source, ulong id)
         {
             if (!s_keyCache.TryGetValue(source, out ConcurrentDictionary<ulong, MeasurementKey> idLookup))
+            {
                 return Undefined;
+            }
 
             if (!idLookup.TryGetValue(id, out MeasurementKey key))
+            {
                 return Undefined;
+            }
 
             return key;
         }
@@ -565,7 +585,9 @@ namespace sttp.transport
         public static MeasurementKey LookUpOrCreate(Guid signalID, string value)
         {
             if (!TrySplit(value, out string source, out ulong id))
+            {
                 return LookUpOrCreate(signalID, Undefined.Source, Undefined.ID);
+            }
 
             return LookUpOrCreate(signalID, source, id);
         }
@@ -587,7 +609,9 @@ namespace sttp.transport
             MeasurementKey key = LookUpBySignalID(signalID);
 
             if (key == Undefined && !TryCreateOrUpdate(signalID, source, id, out key))
+            {
                 return Undefined;
+            }
 
             return key;
         }
@@ -605,7 +629,9 @@ namespace sttp.transport
         public static MeasurementKey LookUpOrCreate(string value)
         {
             if (!TrySplit(value, out string source, out ulong id))
+            {
                 return Undefined;
+            }
 
             return LookUpOrCreate(source, id);
         }
@@ -626,7 +652,9 @@ namespace sttp.transport
             MeasurementKey key = LookUpBySource(source, id);
 
             if (key == Undefined && !TryCreateOrUpdate(Guid.NewGuid(), source, id, out key))
+            {
                 return Undefined;
+            }
 
             return key;
         }
@@ -640,7 +668,9 @@ namespace sttp.transport
         public static MeasurementKey Parse(string value)
         {
             if (TryParse(value, out MeasurementKey key))
+            {
                 return key;
+            }
 
             throw new FormatException("The value is not in the correct format for a MeasurementKey value");
         }
@@ -699,7 +729,9 @@ namespace sttp.transport
             foreach (DataRow measurement in metadata.Rows)
             {
                 if (TrySplit(measurement["ID"].ToString(), out string source, out ulong id))
+                {
                     CreateOrUpdate(measurement["SignalID"].ToNonNullString(Guid.Empty.ToString()).ConvertToType<Guid>(), source, id);
+                }
             }
         }
 

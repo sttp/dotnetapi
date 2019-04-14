@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  ClientBase.cs - Gbtc
 //
-//  Copyright © 2015, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,67 +16,26 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  06/01/2006 - Pinal C. Patel
-//       Original version of source code generated.
-//  09/06/2006 - J. Ritchie Carroll
-//       Added bypass optimizations for high-speed client data access.
-//  11/30/2007 - Pinal C. Patel
-//       Modified the "design time" check in EndInit() method to use LicenseManager.UsageMode property
-//       instead of DesignMode property as the former is more accurate than the latter.
-//  02/19/2008 - Pinal C. Patel
-//       Added code to detect and avoid redundant calls to Dispose().
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  06/18/2009 - Pinal C. Patel
-//       Fixed the implementation of Enabled property.
-//  07/02/2009 - Pinal C. Patel
-//       Modified state altering properties to reconnect the client when changed.
-//  07/08/2009 - J. Ritchie Carroll
-//       Added WaitHandle return value from asynchronous connection.
-//  07/15/2009 - Pinal C. Patel
-//       Modified Connect() to wait for post-connection processing to complete.
-//  07/17/2009 - Pinal C. Patel
-//       Modified SharedSecret to be persisted as an encrypted value.
-//  08/05/2009 - Josh L. Patterson
-//       Edited Comments.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  11/29/2010 - Pinal C. Patel
-//       Updated the implementation of Connect() method so it blocks correctly after updates made to 
-//       ConnectAsync() method in the derived classes.
-//  04/14/2011 - Pinal C. Patel
-//       Updated to use new serialization methods in GSF.Serialization class.
-//  12/02/2011 - J. Ritchie Carroll
-//       Updated event data publication to provide "copy" of reusable buffer instead of original
-//       buffer since you cannot assume how user will use the buffer (they may cache it).
-//  12/29/2011 - J. Ritchie Carroll
-//       Updated Status property to show ConnectionString information.
-//  04/26/2012 - Pinal C. Patel
-//       Updated Create() static method to apply settings from the connection string to the created 
-//       client instance using reflection.
-//  05/22/2015 - J. Ritchie Carroll
-//       Added ZeroMQ to the create IClient options.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Configuration;
-using System.Drawing;
 using System.Reflection;
 using System.Text;
 using System.Threading;
-using GSF.Configuration;
-using GSF.Units;
+using sttp.units;
 
+// ReSharper disable VirtualMemberCallInConstructor
 namespace sttp.communication
 {
     /// <summary>
     /// Base class for a client involved in server-client communication.
     /// </summary>
-    [ToolboxBitmap(typeof(ClientBase))]
-    public abstract class ClientBase : Component, IClient, ISupportInitialize, IPersistSettings
+    public abstract class ClientBase : Component, IClient, ISupportInitialize
     {
         #region [ Members ]
 
@@ -557,7 +516,6 @@ namespace sttp.communication
             if (m_initialized)
                 return;
 
-            LoadSettings();         // Load settings from the config file.
             m_initialized = true;   // Initialize only once.
         }
 
@@ -602,55 +560,6 @@ namespace sttp.communication
                 {
                     // Prevent the IDE from crashing when component is in design mode.
                 }
-            }
-        }
-
-        /// <summary>
-        /// Saves client settings to the config file if the <see cref="PersistSettings"/> property is set to true.
-        /// </summary>
-        /// <exception cref="ConfigurationErrorsException"><see cref="SettingsCategory"/> has a value of null or empty string.</exception>
-        public virtual void SaveSettings()
-        {
-            if (m_persistSettings)
-            {
-                // Ensure that settings category is specified.
-                if (string.IsNullOrEmpty(m_settingsCategory))
-                    throw new ConfigurationErrorsException("SettingsCategory property has not been set");
-
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[m_settingsCategory];
-                settings["ConnectionString", true].Update(m_connectionString);
-                settings["MaxConnectionAttempts", true].Update(m_maxConnectionAttempts);
-                settings["SendBufferSize", true].Update(m_sendBufferSize);
-                settings["ReceiveBufferSize", true].Update(m_receiveBufferSize);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved client settings from the config file if the <see cref="PersistSettings"/> property is set to true.
-        /// </summary>
-        /// <exception cref="ConfigurationErrorsException"><see cref="SettingsCategory"/> has a value of null or empty string.</exception>
-        public virtual void LoadSettings()
-        {
-            if (m_persistSettings)
-            {
-                // Ensure that settings category is specified.
-                if (string.IsNullOrEmpty(m_settingsCategory))
-                    throw new ConfigurationErrorsException("SettingsCategory property has not been set");
-
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[m_settingsCategory];
-                settings.Add("ConnectionString", m_connectionString, "Data required by the client to connect to the server.");
-                settings.Add("MaxConnectionAttempts", m_maxConnectionAttempts, "Maximum number of times the client will attempt to connect to the server.");
-                settings.Add("SendBufferSize", m_sendBufferSize, "Size of the buffer used by the client for sending data from the server.");
-                settings.Add("ReceiveBufferSize", m_receiveBufferSize, "Size of the buffer used by the client for receiving data from the server.");
-                ConnectionString = settings["ConnectionString"].ValueAs(m_connectionString);
-                MaxConnectionAttempts = settings["MaxConnectionAttempts"].ValueAs(m_maxConnectionAttempts);
-                SendBufferSize = settings["SendBufferSize"].ValueAs(m_sendBufferSize);
-                ReceiveBufferSize = settings["ReceiveBufferSize"].ValueAs(m_receiveBufferSize);
             }
         }
 
@@ -708,15 +617,6 @@ namespace sttp.communication
         /// <summary>
         /// Sends data to the server synchronously.
         /// </summary>
-        /// <param name="serializableObject">The serializable object that is to be sent.</param>
-        public virtual void Send(object serializableObject)
-        {
-            Send(Serialization.Serialize(serializableObject, SerializationFormat.Binary));
-        }
-
-        /// <summary>
-        /// Sends data to the server synchronously.
-        /// </summary>
         /// <param name="data">The binary data that is to be sent.</param>
         public virtual void Send(byte[] data)
         {
@@ -742,16 +642,6 @@ namespace sttp.communication
         public virtual WaitHandle SendAsync(string data)
         {
             return SendAsync(m_textEncoding.GetBytes(data));
-        }
-
-        /// <summary>
-        /// Sends data to the server asynchronously.
-        /// </summary>
-        /// <param name="serializableObject">The serializable object that is to be sent.</param>
-        /// <returns><see cref="WaitHandle"/> for the asynchronous operation.</returns>
-        public virtual WaitHandle SendAsync(object serializableObject)
-        {
-            return SendAsync(Serialization.Serialize(serializableObject, SerializationFormat.Binary));
         }
 
         /// <summary>
@@ -1051,7 +941,6 @@ namespace sttp.communication
                     {
                         // This will be done only when the object is disposed by calling Dispose().
                         Disconnect();
-                        SaveSettings();
 
                         if ((object)m_connectHandle != null)
                             m_connectHandle.Dispose();
@@ -1099,9 +988,8 @@ namespace sttp.communication
         {
             Dictionary<string, string> connectionSettings = connectionString.ParseKeyValuePairs();
             IClient client;
-            string protocol;
 
-            if (connectionSettings.TryGetValue("protocol", out protocol))
+            if (connectionSettings.TryGetValue("protocol", out string protocol))
             {
                 connectionSettings.Remove("protocol");
                 StringBuilder settings = new StringBuilder();
@@ -1131,9 +1019,6 @@ namespace sttp.communication
                         break;
                     case "serial":
                         client = new SerialClient(settings.ToString());
-                        break;
-                    case "zeromq":
-                        client = new ZeroMQClient(settings.ToString());
                         break;
                     default:
                         throw new ArgumentException(protocol + " is not a valid transport protocol");

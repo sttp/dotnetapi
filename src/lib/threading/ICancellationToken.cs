@@ -1,5 +1,5 @@
 ﻿//******************************************************************************************************
-//  ICertificateChecker.cs - Gbtc
+//  ICancellationToken.cs - Gbtc
 //
 //  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
@@ -21,33 +21,25 @@
 //
 //******************************************************************************************************
 
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
-
-namespace sttp.security
+namespace sttp.threading
 {
     /// <summary>
-    /// Defines the interface for a generic X.509 certificate checker.
+    /// Represents a token that can be used to cancel an asynchronous operation.
     /// </summary>
-    public interface ICertificateChecker
+    public interface ICancellationToken
     {
         /// <summary>
-        /// Gets the reason why the remote certificate validation
-        /// failed, or null if certificate validation did not fail.
+        /// Gets a value that indicates whether the operation has been canceled.
         /// </summary>
-        string ReasonForFailure
+        bool IsCancelled
         {
             get;
         }
 
         /// <summary>
-        /// Verifies the remote certificate used for authentication.
+        /// Cancels the operation.
         /// </summary>
-        /// <param name="sender">An object that contains state information for this validation.</param>
-        /// <param name="remoteCertificate">The certificate used to authenticate the remote party.</param>
-        /// <param name="chain">The chain of certificate authorities associated with the remote certificate.</param>
-        /// <param name="errors">One or more errors associated with the remote certificate.</param>
-        /// <returns>A flag that determines whether the specified certificate is accepted for authentication.</returns>
-        bool ValidateRemoteCertificate(object sender, X509Certificate remoteCertificate, X509Chain chain, SslPolicyErrors errors);
+        /// <returns><c>true</c> if the operation was canceled; otherwise <c>false</c>.</returns>
+        bool Cancel();
     }
 }

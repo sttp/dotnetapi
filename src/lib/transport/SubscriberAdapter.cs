@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
-//  UnsynchronizedClientSubscription.cs - Gbtc
+//  SubscriberAdapter.cs - Gbtc
 //
 //  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,16 +16,19 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  06/24/2011 - Ritchie
-//       Generated original version of source code.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
-using sttp.tssc;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Timers;
+using sttp.transport.tssc;
+using Timer = System.Timers.Timer;
 
 // ReSharper disable PossibleMultipleEnumeration
 namespace sttp.transport
@@ -75,7 +78,7 @@ namespace sttp.transport
         private bool m_isNaNFiltered;
         private volatile long[] m_baseTimeOffsets;
         private volatile int m_timeIndex;
-        private SharedTimer m_baseTimeRotationTimer;
+        private Timer m_baseTimeRotationTimer;
         private volatile bool m_startTimeSent;
         //private IaonSession m_iaonSession;
 
@@ -83,7 +86,7 @@ namespace sttp.transport
         private readonly object m_bufferBlockCacheLock;
         private uint m_bufferBlockSequenceNumber;
         private uint m_expectedBufferBlockConfirmationNumber;
-        private SharedTimer m_bufferBlockRetransmissionTimer;
+        private Timer m_bufferBlockRetransmissionTimer;
         private double m_bufferBlockRetransmissionTimeout;
 
         private bool m_disposed;
@@ -122,16 +125,7 @@ namespace sttp.transport
         /// <summary>
         /// Gets name of the action adapter.
         /// </summary>
-        public override string Name
-        {
-            get => base.Name;
-
-            set
-            {
-                base.Name = value;
-                Log.InitialStackMessages = Log.InitialStackMessages.Union("AdapterName", GetType().Name, "HostName", value);
-            }
-        }
+        public string Name { get; set; }
 
         /// <summary>
         /// Gets the <see cref="Guid"/> client TCP connection identifier of this <see cref="SubscriberAdapter"/>.
@@ -205,11 +199,7 @@ namespace sttp.transport
         /// basically a delay, or timer interval, over which to process data. A value of -1 means to use the default processing
         /// interval while a value of 0 means to process data as fast as possible.
         /// </remarks>
-        public override int ProcessingInterval
-        {
-            get => base.ProcessingInterval;
-            set => base.ProcessingInterval = value;
-        }
+        public int ProcessingInterval { get; set; }
 
         /// <summary>
         /// Gets or sets primary keys of input measurements the <see cref="SubscriberAdapter"/> expects, if any.
@@ -240,16 +230,6 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Gets the flag indicating if this adapter supports temporal processing.
-        /// </summary>
-        /// <remarks>
-        /// Although this adapter provisions support for temporal processing by proxying historical data to a remote sink, the adapter
-        /// does not need to be automatically engaged within an actual temporal <see cref="IaonSession"/>, therefore this method returns
-        /// <c>false</c> to make sure the adapter doesn't get automatically instantiated within a temporal session.
-        /// </remarks>
-        public override bool SupportsTemporalProcessing => false;
-
-        /// <summary>
         /// Gets a formatted message describing the status of this <see cref="SubscriberAdapter"/>.
         /// </summary>
         public override string Status
@@ -257,9 +237,8 @@ namespace sttp.transport
             get
             {
                 StringBuilder status = new StringBuilder();
-                SubscriberConnection connection;
 
-                if (m_parent.ClientConnections.TryGetValue(m_clientID, out connection))
+                if (m_parent.ClientConnections.TryGetValue(m_clientID, out SubscriberConnection connection))
                 {
                     status.Append(connection.Status);
                     status.AppendLine();
@@ -273,20 +252,6 @@ namespace sttp.transport
                 return status.ToString();
             }
         }
-
-        ///// <summary>
-        ///// Gets the status of the active temporal session, if any.
-        ///// </summary>
-        //public string TemporalSessionStatus
-        //{
-        //    get
-        //    {
-        //        if ((object)m_iaonSession == null)
-        //            return null;
-
-        //        return m_iaonSession.Status;
-        //    }
-        //}
 
         #endregion
 
@@ -331,9 +296,8 @@ namespace sttp.transport
         public override void Initialize()
         {
             MeasurementKey[] inputMeasurementKeys;
-            string setting;
 
-            if (Settings.TryGetValue("inputMeasurementKeys", out setting))
+            if (Settings.TryGetValue("inputMeasurementKeys", out string setting))
             {
                 // IMPORTANT: The allowSelect argument of ParseInputMeasurementKeys must be null
                 //            in order to prevent SQL injection via the subscription filter expression
@@ -381,12 +345,12 @@ namespace sttp.transport
 
             if (m_parent.UseBaseTimeOffsets && m_includeTime)
             {
-                m_baseTimeRotationTimer = Common.TimerScheduler.CreateTimer(m_useMillisecondResolution ? 60000 : 420000);
+                m_baseTimeRotationTimer = new Timer(m_useMillisecondResolution ? 60000 : 420000);
                 m_baseTimeRotationTimer.AutoReset = true;
                 m_baseTimeRotationTimer.Elapsed += BaseTimeRotationTimer_Elapsed;
             }
 
-            m_bufferBlockRetransmissionTimer = Common.TimerScheduler.CreateTimer((int)(m_bufferBlockRetransmissionTimeout * 1000.0D));
+            m_bufferBlockRetransmissionTimer = new Timer((int)(m_bufferBlockRetransmissionTimeout * 1000.0D));
             m_bufferBlockRetransmissionTimer.AutoReset = false;
             m_bufferBlockRetransmissionTimer.Elapsed += BufferBlockRetransmissionTimer_Elapsed;
 
@@ -815,7 +779,7 @@ namespace sttp.transport
         }
 
         // Retransmits all buffer blocks for which confirmation has not yet been received
-        private void BufferBlockRetransmissionTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void BufferBlockRetransmissionTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             lock (m_bufferBlockCacheLock)
             {
@@ -881,7 +845,7 @@ namespace sttp.transport
                 ProcessingComplete(this, new EventArgs<SubscriberAdapter, EventArgs>(this, EventArgs.Empty));
         }
 
-        private void BaseTimeRotationTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void BaseTimeRotationTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             RotateBaseTimes();
         }

@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  TlsServer.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,10 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  07/12/2012 - Stephen C. Wills
-//       Generated original version of source code.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//       Modified Header.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -39,10 +37,8 @@ using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
-using GSF.Configuration;
-using GSF.IO;
 using sttp.security;
-using GSF.Threading;
+using sttp.threading;
 
 #if MONO
 #pragma warning disable 649
@@ -459,26 +455,8 @@ namespace sttp.communication
                 {
                     try
                     {
-                        string applicationName;
-
                         // Get application name
-                        try
-                        {
-                            // Attempt to retrieve application name as defined in common security settings - this name
-                            // is typically preconfigured as the desired event source for event log entries
-                            ConfigurationFile config = ConfigurationFile.Current;
-                            CategorizedSettingsElementCollection settings = config.Settings["SecurityProvider"];
-                            applicationName = settings["ApplicationName"].Value;
-                        }
-                        catch
-                        {
-                            applicationName = null;
-                        }
-
-                        // Fall back on running executable name
-                        if (string.IsNullOrWhiteSpace(applicationName))
-                            applicationName = FilePath.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName);
-
+                        string applicationName = FilePath.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName);
                         string message = $"One or more less secure TLS/SSL protocols \"{m_enabledSslProtocols}\" are being used by an instance of the TlsServer in {applicationName}";
                         EventLog.WriteEntry(applicationName, message, EventLogEntryType.Warning, 1);
                     }
@@ -599,10 +577,9 @@ namespace sttp.communication
         {
             buffer.ValidateParameters(startIndex, length);
 
-            TlsClientInfo clientInfo;
             TransportProvider<TlsSocket> tlsClient;
 
-            if (m_clientInfoLookup.TryGetValue(clientID, out clientInfo))
+            if (m_clientInfoLookup.TryGetValue(clientID, out TlsClientInfo clientInfo))
             {
                 tlsClient = clientInfo.Client;
 
@@ -628,87 +605,6 @@ namespace sttp.communication
             }
 
             throw new InvalidOperationException("Specified client ID does not exist, cannot read buffer.");
-        }
-
-        /// <summary>
-        /// Saves <see cref="TcpServer"/> settings to the config file if the <see cref="ServerBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void SaveSettings()
-        {
-            base.SaveSettings();
-
-            if (PersistSettings)
-            {
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings["EnabledSslProtocols", true].Update(m_enabledSslProtocols);
-                settings["RequireClientCertificate", true].Update(m_requireClientCertificate);
-                settings["CheckCertificateRevocation", true].Update(m_checkCertificateRevocation);
-                settings["CertificateFile", true].Update(m_certificateFile);
-                settings["TrustedCertificatesPath", true].Update(m_trustedCertificatesPath);
-                settings["ValidPolicyErrors", true].Update(ValidPolicyErrors);
-                settings["ValidChainFlags", true].Update(ValidChainFlags);
-                settings["PayloadAware", true].Update(m_payloadAware);
-                settings["IntegratedSecurity", true].Update(m_integratedSecurity);
-                settings["AllowDualStackSocket", true].Update(m_allowDualStackSocket);
-                settings["MaxSendQueueSize", true].Update(m_maxSendQueueSize);
-                settings["NoDelay", true].Update(m_noDelay);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved <see cref="TcpServer"/> settings from the config file if the <see cref="ServerBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void LoadSettings()
-        {
-            base.LoadSettings();
-
-            if (PersistSettings)
-            {
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings.Add("EnabledSslProtocols", m_enabledSslProtocols, "The set of SSL protocols that are enabled for this server.");
-                settings.Add("RequireClientCertificate", m_requireClientCertificate, "True if the client certificate is required during authentication, otherwise False.");
-                settings.Add("CheckCertificateRevocation", m_checkCertificateRevocation, "True if the certificate revocation list is to be checked during authentication, otherwise False.");
-                settings.Add("CertificateFile", m_certificateFile, "Path to the local certificate used by this server for authentication.");
-                settings.Add("TrustedCertificatesPath", m_trustedCertificatesPath, "Path to the directory containing the trusted remote certificates.");
-                settings.Add("ValidPolicyErrors", ValidPolicyErrors, "Set of valid policy errors when validating remote certificates.");
-                settings.Add("ValidChainFlags", ValidChainFlags, "Set of valid chain flags used when validating remote certificates.");
-                settings.Add("PayloadAware", m_payloadAware, "True if payload boundaries are to be preserved during transmission, otherwise False.");
-                settings.Add("IntegratedSecurity", m_integratedSecurity, "True if the client Windows account credentials are used for authentication, otherwise False.");
-                settings.Add("AllowDualStackSocket", m_allowDualStackSocket, "True if dual-mode socket is allowed when IP address is IPv6, otherwise False.");
-                settings.Add("MaxSendQueueSize", m_maxSendQueueSize, "The maximum size of the send queue before payloads are dumped from the queue.");
-                settings.Add("NoDelay", m_noDelay, "True to disable Nagle so that small packets are delivered to the remote host without delay, otherwise False.");
-
-                try
-                {
-                    // Attempt to set desired transport security protocols
-                    EnabledSslProtocols = settings["EnabledSslProtocols"].ValueAs(m_enabledSslProtocols);
-                }
-                catch (SecurityException ex)
-                {
-                    // Security exception can occur when user forces use of older TLS protocol through configuration but event log warning entry cannot be written
-                    OnClientConnectingException(new SecurityException($"Transport layer security protocols assigned as configured: \"{EnabledSslProtocols}\", however, event log entry for security exception could not be written: {ex.Message}", ex));
-                }
-
-                RequireClientCertificate = settings["RequireClientCertificate"].ValueAs(m_requireClientCertificate);
-                CheckCertificateRevocation = settings["CheckCertificateRevocation"].ValueAs(m_checkCertificateRevocation);
-                CertificateFile = settings["CertificateFile"].ValueAs(m_certificateFile);
-                TrustedCertificatesPath = settings["TrustedCertificatesPath"].ValueAs(m_trustedCertificatesPath);
-                ValidPolicyErrors = settings["ValidPolicyErrors"].ValueAs(ValidPolicyErrors);
-                ValidChainFlags = settings["ValidChainFlags"].ValueAs(ValidChainFlags);
-                PayloadAware = settings["PayloadAware"].ValueAs(m_payloadAware);
-                IntegratedSecurity = settings["IntegratedSecurity"].ValueAs(m_integratedSecurity);
-                AllowDualStackSocket = settings["AllowDualStackSocket"].ValueAs(m_allowDualStackSocket);
-                MaxSendQueueSize = settings["MaxSendQueueSize"].ValueAs(m_maxSendQueueSize);
-                NoDelay = settings["NoDelay"].ValueAs(m_noDelay);
-            }
-
-            if (!FilePath.InApplicationPath(TrustedCertificatesPath))
-                OnClientConnectingException(new SecurityException($"Trusted certificates path \"{TrustedCertificatesPath}\" is not in application path"));
         }
 
         /// <summary>
@@ -740,7 +636,7 @@ namespace sttp.communication
         {
             if (CurrentState == ServerState.NotRunning)
             {
-                // Initialize if unitialized.
+                // Initialize if uninitialized.
                 if (!Initialized)
                     Initialize();
 
@@ -789,9 +685,7 @@ namespace sttp.communication
         /// <exception cref="InvalidOperationException">Client does not exist for the specified <paramref name="clientID"/>.</exception>
         public override void DisconnectOne(Guid clientID)
         {
-            TransportProvider<TlsSocket> tlsClient;
-
-            if (!TryGetClient(clientID, out tlsClient))
+            if (!TryGetClient(clientID, out TransportProvider<TlsSocket> tlsClient))
                 return;
 
             try
@@ -817,8 +711,7 @@ namespace sttp.communication
         /// <exception cref="InvalidOperationException">Client does not exist for the specified <paramref name="clientID"/>.</exception>
         public bool TryGetClient(Guid clientID, out TransportProvider<TlsSocket> tlsClient)
         {
-            TlsClientInfo clientInfo;
-            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out clientInfo);
+            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out TlsClientInfo clientInfo);
 
             if (clientExists)
                 tlsClient = clientInfo.Client;
@@ -836,8 +729,7 @@ namespace sttp.communication
         /// <returns>A <see cref="WindowsPrincipal"/> object.</returns>
         public bool TryGetClientPrincipal(Guid clientID, out WindowsPrincipal clientPrincipal)
         {
-            TlsClientInfo clientInfo;
-            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out clientInfo);
+            bool clientExists = m_clientInfoLookup.TryGetValue(clientID, out TlsClientInfo clientInfo);
 
             if (clientExists)
                 clientPrincipal = clientInfo.ClientPrincipal;
@@ -877,14 +769,12 @@ namespace sttp.communication
         /// <returns><see cref="WaitHandle"/> for the asynchronous operation.</returns>
         protected override WaitHandle SendDataToAsync(Guid clientID, byte[] data, int offset, int length)
         {
-            TlsClientInfo clientInfo;
             ConcurrentQueue<TlsServerPayload> sendQueue;
-            TlsServerPayload dequeuedPayload;
 
             TlsServerPayload payload;
             ManualResetEventSlim handle;
 
-            if (!m_clientInfoLookup.TryGetValue(clientID, out clientInfo))
+            if (!m_clientInfoLookup.TryGetValue(clientID, out TlsClientInfo clientInfo))
                 throw new InvalidOperationException($"No client found for ID {clientID}.");
 
             sendQueue = clientInfo.SendQueue;
@@ -915,7 +805,7 @@ namespace sttp.communication
                 // Send next queued payload.
                 if (Interlocked.CompareExchange(ref clientInfo.Sending, 1, 0) == 0)
                 {
-                    if (sendQueue.TryDequeue(out dequeuedPayload))
+                    if (sendQueue.TryDequeue(out TlsServerPayload dequeuedPayload))
                         ThreadPool.QueueUserWorkItem(state => SendPayload((TlsServerPayload)state), dequeuedPayload);
                     else
                         Interlocked.Exchange(ref clientInfo.Sending, 0);
@@ -999,14 +889,12 @@ namespace sttp.communication
                         // Create operation to dump send queue payloads when the queue grows too large.
                         clientInfo.DumpPayloadsOperation = new ShortSynchronizedOperation(() =>
                         {
-                            TlsServerPayload payload;
-
                             // Check to see if the client has reached the maximum send queue size.
                             if (m_maxSendQueueSize > 0 && clientInfo.SendQueue.Count >= m_maxSendQueueSize)
                             {
                                 for (int i = 0; i < m_maxSendQueueSize; i++)
                                 {
-                                    if (clientInfo.SendQueue.TryDequeue(out payload))
+                                    if (clientInfo.SendQueue.TryDequeue(out TlsServerPayload payload))
                                     {
                                         payload.WaitHandle.Set();
                                         payload.WaitHandle.Dispose();
@@ -1125,9 +1013,9 @@ namespace sttp.communication
                 {
                     negotiateStream.EndAuthenticateAsServer(asyncResult);
 
-                    if (negotiateStream.RemoteIdentity is WindowsIdentity)
+                    if (negotiateStream.RemoteIdentity is WindowsIdentity identity)
                     {
-                        clientPrincipal = new WindowsPrincipal((WindowsIdentity)negotiateStream.RemoteIdentity);
+                        clientPrincipal = new WindowsPrincipal(identity);
                         clientInfo.ClientPrincipal = clientPrincipal;
                     }
                 }
@@ -1311,9 +1199,8 @@ namespace sttp.communication
         {
             Tuple<Guid, bool> asyncState = (Tuple<Guid, bool>)asyncResult.AsyncState;
             bool waitingForHeader = asyncState.Item2;
-            TransportProvider<TlsSocket> client;
 
-            if (!TryGetClient(asyncState.Item1, out client))
+            if (!TryGetClient(asyncState.Item1, out TransportProvider<TlsSocket> client))
                 return;
 
             try
@@ -1459,14 +1346,12 @@ namespace sttp.communication
         /// </summary>
         private void TerminateConnection(TransportProvider<TlsSocket> client, bool raiseEvent)
         {
-            TlsClientInfo clientInfo;
-
             client.Reset();
 
             if (raiseEvent)
                 OnClientDisconnected(client.ID);
 
-            m_clientInfoLookup.TryRemove(client.ID, out clientInfo);
+            m_clientInfoLookup.TryRemove(client.ID, out _);
         }
 
         /// <summary>

@@ -36,10 +36,12 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Timers;
 using System.Xml;
 using sttp.communication;
 using sttp.security;
 using sttp.units;
+using Timer = System.Timers.Timer;
 
 namespace sttp.transport
 {
@@ -148,11 +150,12 @@ namespace sttp.transport
         private CertificatePolicyChecker m_certificateChecker;
         private Dictionary<X509Certificate, DataRow> m_subscriberIdentities;
         private ConcurrentDictionary<Guid, SubscriberConnection> m_clientConnections;
+        private DataSet m_dataSource;
         private readonly ConcurrentDictionary<Guid, IServer> m_clientPublicationChannels;
         private readonly Dictionary<Guid, Dictionary<int, string>> m_clientNotifications;
         private readonly object m_clientNotificationsLock;
-        private SharedTimer m_commandChannelRestartTimer;
-        private SharedTimer m_cipherKeyRotationTimer;
+        private Timer m_commandChannelRestartTimer;
+        private Timer m_cipherKeyRotationTimer;
         private RoutingTables m_routingTables;
         private string m_metadataTables;
         private string m_cacheMeasurementKeys;
@@ -217,13 +220,13 @@ namespace sttp.transport
             m_routingTables.ProcessException += m_routingTables_ProcessException;
 
             // Setup a timer for restarting the command channel if it fails
-            m_commandChannelRestartTimer = Common.TimerScheduler.CreateTimer(2000);
+            m_commandChannelRestartTimer = new Timer(2000);
             m_commandChannelRestartTimer.AutoReset = false;
             m_commandChannelRestartTimer.Enabled = false;
             m_commandChannelRestartTimer.Elapsed += m_commandChannelRestartTimer_Elapsed;
 
             // Setup a timer for rotating cipher keys
-            m_cipherKeyRotationTimer = Common.TimerScheduler.CreateTimer((int)DefaultCipherKeyRotationPeriod);
+            m_cipherKeyRotationTimer = new Timer((int)DefaultCipherKeyRotationPeriod);
             m_cipherKeyRotationTimer.AutoReset = true;
             m_cipherKeyRotationTimer.Enabled = false;
             m_cipherKeyRotationTimer.Elapsed += m_cipherKeyRotationTimer_Elapsed;
@@ -358,22 +361,20 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Gets or sets <see cref="DataSet"/> based data source used to load each <see cref="IAdapter"/>.
-        /// Updates to this property will cascade to all items in this <see cref="AdapterCollectionBase{T}"/>.
+        /// Gets or sets <see cref="DataSet"/> based data source.
         /// </summary>
         public virtual DataSet DataSource
         {
-            get => base.DataSource;
+            get => m_dataSource;
             set
             {
                 if (DataSourceChanged(value))
                 {
-                    base.DataSource = value;
+                    m_dataSource = value;
 
                     UpdateRights();
                     UpdateCertificateChecker();
                     UpdateClientNotifications();
-                    UpdateLatestMeasurementCache();
                     NotifyClientsOfConfigurationChange();
                 }
             }
@@ -409,18 +410,7 @@ namespace sttp.transport
         /// <remarks>
         /// The assigned name is used as the settings category when persisting the TCP server settings.
         /// </remarks>
-        public virtual string Name
-        {
-            get => base.Name;
-            set
-            {
-                IPersistSettings commandChannel = m_commandChannel as IPersistSettings;
-                base.Name = value.ToUpper();
-
-                if ((object)commandChannel != null)
-                    commandChannel.SettingsCategory = value.Replace("!", "").ToLower();
-            }
-        }
+        public string Name { get; set; }
 
         /// <summary>
         /// Gets or sets semi-colon separated list of SQL select statements used to create data for meta-data exchange.
@@ -607,11 +597,9 @@ namespace sttp.transport
         public virtual void Initialize()
         {
             Dictionary<string, string> settings = Settings;
-            string setting;
-            double period;
 
             // Check flag that will determine if subscriber payloads should be encrypted by default
-            if (settings.TryGetValue("encryptPayload", out setting))
+            if (settings.TryGetValue("encryptPayload", out string setting))
                 m_encryptPayload = setting.ParseBoolean();
 
             // Check flag that indicates whether publisher is publishing data
@@ -642,44 +630,13 @@ namespace sttp.transport
             if (settings.TryGetValue("useBaseTimeOffsets", out setting))
                 m_useBaseTimeOffsets = setting.ParseBoolean();
 
-            if (settings.TryGetValue("measurementReportingInterval", out setting))
-                MeasurementReportingInterval = int.Parse(setting);
-            else
-                MeasurementReportingInterval = AdapterBase.DefaultMeasurementReportingInterval;
-
             // Get user specified period for cipher key rotation
-            if (settings.TryGetValue("cipherKeyRotationPeriod", out setting) && double.TryParse(setting, out period))
+            if (settings.TryGetValue("cipherKeyRotationPeriod", out setting) && double.TryParse(setting, out double period))
                 CipherKeyRotationPeriod = period;
 
             // Get security mode used for the command channel
             if (settings.TryGetValue("securityMode", out setting))
                 m_securityMode = (SecurityMode)Enum.Parse(typeof(SecurityMode), setting);
-
-            if (settings.TryGetValue("cacheMeasurementKeys", out m_cacheMeasurementKeys))
-            {
-                // Create adapter for caching measurements that have a slower refresh interval
-                LatestMeasurementCache cache = new LatestMeasurementCache($"trackLatestMeasurements=true;lagTime=60;leadTime=60;inputMeasurementKeys={{{m_cacheMeasurementKeys}}}");
-
-                // Set up its data source first
-                cache.DataSource = DataSource;
-
-                // Add the cache as a child to the data publisher
-                Add(cache);
-
-                // AutoInitialize is false for the DataPublisher,
-                // so we must initialize manually
-                cache.Initialize();
-                cache.Initialized = true;
-
-                // Update measurement reporting interval post-initialization
-                cache.MeasurementReportingInterval = MeasurementReportingInterval;
-
-                // Trigger routing table calculation to route cached measurements to the cache
-                m_routingTables.CalculateRoutingTables(null);
-
-                // Start tracking cached measurements
-                cache.Start();
-            }
 
             if (m_securityMode == SecurityMode.TLS)
             {
@@ -732,7 +689,7 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Queues a collection of measurements for processing to each <see cref="IActionAdapter"/> connected to this <see cref="DataPublisher"/>.
+        /// Queues a collection of measurements for processing to each subscriber connected to this <see cref="DataPublisher"/>.
         /// </summary>
         /// <param name="measurements">Measurements to queue for processing.</param>
         public virtual void QueueMeasurementsForProcessing(IEnumerable<IMeasurement> measurements)
@@ -785,7 +742,6 @@ namespace sttp.transport
         {
             StringBuilder clientEnumeration = new StringBuilder();
             Guid[] clientIDs = (Guid[])m_commandChannel.ClientIDs.Clone();
-            SubscriberConnection connection;
             bool hasActiveTemporalSession;
 
             if (filterToTemporalSessions)
@@ -795,7 +751,7 @@ namespace sttp.transport
 
             for (int i = 0; i < clientIDs.Length; i++)
             {
-                if (m_clientConnections.TryGetValue(clientIDs[i], out connection) && (object)connection != null && (object)connection.Subscription != null)
+                if (m_clientConnections.TryGetValue(clientIDs[i], out SubscriberConnection connection) && (object)connection != null && (object)connection.Subscription != null)
                 {
                     hasActiveTemporalSession = connection.Subscription.TemporalConstraintIsDefined();
 
@@ -812,7 +768,7 @@ namespace sttp.transport
             // Return enumeration
             return clientEnumeration.ToString();
         }
-
+0-
         private string GetOperationalModes(SubscriberConnection connection)
         {
             StringBuilder description = new StringBuilder();
@@ -871,9 +827,7 @@ namespace sttp.transport
 
             if (success)
             {
-                SubscriberConnection connection;
-
-                if (m_clientConnections.TryGetValue(clientID, out connection))
+                if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
                     connection.RotateCipherKeys();
                 else
                     OnStatusMessage(MessageLevel.Error, $"Failed to find connected client {clientID}");
@@ -901,9 +855,7 @@ namespace sttp.transport
 
             if (success)
             {
-                SubscriberConnection connection;
-
-                if (m_clientConnections.TryGetValue(clientID, out connection))
+                if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
                     return connection.SubscriberInfo;
 
                 OnStatusMessage(MessageLevel.Error, $"Failed to find connected client {clientID}");
@@ -911,54 +863,6 @@ namespace sttp.transport
 
             return "";
         }
-
-        ///// <summary>
-        ///// Gets temporal status for a specified client connection.
-        ///// </summary>
-        ///// <param name="clientIndex">Enumerated index for client connection.</param>
-        //[AdapterCommand("Gets temporal status for a subscriber, if any, using its enumerated index.", "Administrator", "Editor", "Viewer")]
-        //public virtual string GetTemporalStatus(int clientIndex)
-        //{
-        //    Guid clientID = Guid.Empty;
-        //    bool success = true;
-
-        //    try
-        //    {
-        //        clientID = m_commandChannel.ClientIDs[clientIndex];
-        //    }
-        //    catch
-        //    {
-        //        success = false;
-        //        OnStatusMessage(MessageLevel.Error, $"Failed to find connected client with enumerated index {clientIndex}");
-        //    }
-
-        //    if (success)
-        //    {
-        //        ClientConnection connection;
-
-        //        if (m_clientConnections.TryGetValue(clientID, out connection))
-        //        {
-        //            string temporalStatus = null;
-
-        //            if ((object)connection.Subscription != null)
-        //            {
-        //                if (connection.Subscription.TemporalConstraintIsDefined())
-        //                    temporalStatus = connection.Subscription.TemporalSessionStatus;
-        //                else
-        //                    temporalStatus = "Subscription does not have an active temporal session.";
-        //            }
-
-        //            if (string.IsNullOrWhiteSpace(temporalStatus))
-        //                temporalStatus = "Temporal session status is unavailable.";
-
-        //            return temporalStatus;
-        //        }
-
-        //        OnStatusMessage(MessageLevel.Error, $"Failed to find connected client {clientID}");
-        //    }
-
-        //    return "";
-        //}
 
         /// <summary>
         /// Gets the local certificate currently in use by the data publisher.
@@ -1009,7 +913,6 @@ namespace sttp.transport
         /// Gets subscriber status for specified subscriber ID.
         /// </summary>
         /// <param name="subscriberID">Guid based subscriber ID for client connection.</param>
-        [AdapterCommand("Gets subscriber status for client connection using its subscriber ID.", "Administrator", "Editor", "Viewer")]
         public virtual Tuple<Guid, bool, string> GetSubscriberStatus(Guid subscriberID)
         {
             return new Tuple<Guid, bool, string>(subscriberID, GetConnectionProperty(subscriberID, cc => cc.IsConnected), GetConnectionProperty(subscriberID, cc => cc.SubscriberInfo));
@@ -1018,7 +921,6 @@ namespace sttp.transport
         /// <summary>
         /// Resets the counters for the lifetime statistics without interrupting the adapter's operations.
         /// </summary>
-        [AdapterCommand("Resets the counters for the lifetime statistics without interrupting the adapter's operations.", "Administrator", "Editor")]
         public virtual void ResetLifetimeCounters()
         {
             m_lifetimeMeasurements = 0L;
@@ -1033,7 +935,6 @@ namespace sttp.transport
         /// Sends a notification to all subscribers.
         /// </summary>
         /// <param name="message">The message to be sent.</param>
-        [AdapterCommand("Sends a notification to all subscribers.", "Administrator", "Editor")]
         public virtual void SendNotification(string message)
         {
             string notification = $"[{DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff")}] {message}";
@@ -1064,7 +965,6 @@ namespace sttp.transport
             Guid signalID;
 
             byte[] serializedSignalIndexCache;
-            SubscriberConnection connection;
 
             Func<Guid, bool> hasRightsFunc = id => true;
 
@@ -1094,7 +994,7 @@ namespace sttp.transport
             serializedSignalIndexCache = SerializeSignalIndexCache(clientID, signalIndexCache);
 
             // Send client updated signal index cache
-            if (m_clientConnections.TryGetValue(clientID, out connection) && connection.IsSubscribed)
+            if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection) && connection.IsSubscribed)
                 SendClientResponse(clientID, ServerResponse.UpdateSignalIndexCache, ServerCommand.Subscribe, serializedSignalIndexCache);
         }
 
@@ -1114,8 +1014,6 @@ namespace sttp.transport
         {
             try
             {
-                Guid subscriberID;
-
                 lock (m_clientNotificationsLock)
                 {
                     m_clientNotifications.Clear();
@@ -1124,7 +1022,7 @@ namespace sttp.transport
                     {
                         foreach (DataRow row in DataSource.Tables["Subscribers"].Rows)
                         {
-                            if (Guid.TryParse(row["ID"].ToNonNullString(), out subscriberID))
+                            if (Guid.TryParse(row["ID"].ToNonNullString(), out Guid subscriberID))
                                 m_clientNotifications.Add(subscriberID, new Dictionary<int, string>());
                         }
                     }
@@ -1175,9 +1073,7 @@ namespace sttp.transport
         private void DeserializeClientNotifications()
         {
             string notificationsFileName = FilePath.GetAbsolutePath($"{Name}Notifications.txt");
-            Dictionary<int, string> notifications;
             string notification;
-            Guid subscriberID;
 
             if (File.Exists(notificationsFileName))
             {
@@ -1190,9 +1086,9 @@ namespace sttp.transport
                     {
                         int separatorIndex = line.IndexOf(',');
 
-                        if (Guid.TryParse(line.Substring(0, separatorIndex), out subscriberID))
+                        if (Guid.TryParse(line.Substring(0, separatorIndex), out Guid subscriberID))
                         {
-                            if (m_clientNotifications.TryGetValue(subscriberID, out notifications))
+                            if (m_clientNotifications.TryGetValue(subscriberID, out Dictionary<int, string> notifications))
                             {
                                 notification = line.Substring(separatorIndex + 1);
                                 notifications.Add(notification.GetHashCode(), notification);
@@ -1213,13 +1109,12 @@ namespace sttp.transport
 
         private void SendNotifications(SubscriberConnection connection)
         {
-            Dictionary<int, string> notifications;
             byte[] hash;
             byte[] message;
 
             using (MemoryStream buffer = new MemoryStream())
             {
-                if (m_clientNotifications.TryGetValue(connection.SubscriberID, out notifications))
+                if (m_clientNotifications.TryGetValue(connection.SubscriberID, out Dictionary<int, string> notifications))
                 {
                     foreach (KeyValuePair<int, string> pair in notifications)
                     {
@@ -1242,9 +1137,7 @@ namespace sttp.transport
         /// <returns>Text encoding associated with a particular client.</returns>
         protected internal Encoding GetClientEncoding(Guid clientID)
         {
-            SubscriberConnection connection;
-
-            if (m_clientConnections.TryGetValue(clientID, out connection))
+            if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
             {
                 Encoding clientEncoding = connection.Encoding;
 
@@ -1265,9 +1158,7 @@ namespace sttp.transport
         {
             bool result = SendClientResponse(clientID, ServerResponse.DataStartTime, ServerCommand.Subscribe, BigEndian.GetBytes((long)startTime));
 
-            SubscriberConnection connection;
-
-            if (m_clientConnections.TryGetValue(clientID, out connection))
+            if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
                 OnStatusMessage(MessageLevel.Info, $"Start time sent to {connection.ConnectionID}.");
 
             return result;
@@ -1360,17 +1251,15 @@ namespace sttp.transport
         private void TryFindClientDetails(SubscriberConnection connection)
         {
             TlsServer commandChannel = m_commandChannel as TlsServer;
-            TransportProvider<TlsServer.TlsSocket> client;
             X509Certificate remoteCertificate;
             X509Certificate trustedCertificate;
-            DataRow subscriber;
 
             // If connection is not TLS, there is no X.509 certificate
             if ((object)commandChannel == null)
                 return;
 
             // If connection is not found, cannot get X.509 certificate
-            if (!commandChannel.TryGetClient(connection.ClientID, out client))
+            if (!commandChannel.TryGetClient(connection.ClientID, out TransportProvider<TlsServer.TlsSocket> client))
                 return;
 
             // Get remote certificate and corresponding trusted certificate
@@ -1379,7 +1268,7 @@ namespace sttp.transport
 
             if ((object)trustedCertificate != null)
             {
-                if (m_subscriberIdentities.TryGetValue(trustedCertificate, out subscriber))
+                if (m_subscriberIdentities.TryGetValue(trustedCertificate, out DataRow subscriber))
                 {
                     // Load client details from subscriber identity
                     connection.SubscriberID = Guid.Parse(subscriber["ID"].ToNonNullString(Guid.Empty.ToString()).Trim());
@@ -1395,13 +1284,12 @@ namespace sttp.transport
         {
             string[] splitList = addressList.Split(';', ',');
             List<IPAddress> ipAddressList = new List<IPAddress>();
-            IPAddress ipAddress;
             string dualStackAddress;
 
             foreach (string address in splitList)
             {
                 // Attempt to parse the IP address
-                if (!IPAddress.TryParse(address.Trim(), out ipAddress))
+                if (!IPAddress.TryParse(address.Trim(), out IPAddress ipAddress))
                     continue;
 
                 // Add the parsed address to the list
@@ -1427,8 +1315,6 @@ namespace sttp.transport
             try
             {
                 CertificatePolicy policy;
-                SslPolicyErrors validPolicyErrors;
-                X509ChainStatusFlags validChainFlags;
 
                 string remoteCertificateFile;
                 X509Certificate certificate;
@@ -1446,10 +1332,10 @@ namespace sttp.transport
                         policy = new CertificatePolicy();
                         remoteCertificateFile = subscriber["RemoteCertificateFile"].ToNonNullString();
 
-                        if (Enum.TryParse(subscriber["ValidPolicyErrors"].ToNonNullString(), out validPolicyErrors))
+                        if (Enum.TryParse(subscriber["ValidPolicyErrors"].ToNonNullString(), out SslPolicyErrors validPolicyErrors))
                             policy.ValidPolicyErrors = validPolicyErrors;
 
-                        if (Enum.TryParse(subscriber["ValidChainFlags"].ToNonNullString(), out validChainFlags))
+                        if (Enum.TryParse(subscriber["ValidChainFlags"].ToNonNullString(), out X509ChainStatusFlags validChainFlags))
                             policy.ValidChainFlags = validChainFlags;
 
                         if (File.Exists(remoteCertificateFile))
@@ -1495,7 +1381,7 @@ namespace sttp.transport
                 {
                     // It is important here that "SELECT" not be allowed in parsing the input measurement keys expression since this key comes
                     // from the remote subscription - this will prevent possible SQL injection attacks.
-                    requestedInputs = AdapterBase.ParseInputMeasurementKeys(DataSource, false, subscription.RequestedInputFilter);
+                    requestedInputs = FilterExpressionParser.ParseInputMeasurementKeys(DataSource, subscription.RequestedInputFilter);
                     authorizedSignals = new HashSet<MeasurementKey>();
                     subscriberID = subscription.SubscriberID;
 
@@ -1526,11 +1412,10 @@ namespace sttp.transport
         // Send binary response packet to client
         private bool SendClientResponse(Guid clientID, byte responseCode, byte commandCode, byte[] data)
         {
-            SubscriberConnection connection;
             bool success = false;
 
             // Attempt to lookup associated client connection
-            if (m_clientConnections.TryGetValue(clientID, out connection) && (object)connection != null && !connection.ClientNotFoundExceptionOccurred)
+            if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection) && (object)connection != null && !connection.ClientNotFoundExceptionOccurred)
             {
                 try
                 {
@@ -1688,18 +1573,16 @@ namespace sttp.transport
             try
             {
                 Guid clientID = (Guid)state;
-                SubscriberConnection connection;
-                IServer publicationChannel;
 
                 RemoveClientSubscription(clientID);
 
-                if (m_clientConnections.TryRemove(clientID, out connection))
+                if (m_clientConnections.TryRemove(clientID, out SubscriberConnection connection))
                 {
                     connection.Dispose();
                     OnStatusMessage(MessageLevel.Info, "Client disconnected from command channel.");
                 }
 
-                m_clientPublicationChannels.TryRemove(clientID, out publicationChannel);
+                m_clientPublicationChannels.TryRemove(clientID, out IServer publicationChannel);
             }
             catch (Exception ex)
             {
@@ -1712,9 +1595,7 @@ namespace sttp.transport
         {
             lock (this)
             {
-                SubscriberAdapter clientSubscription;
-
-                if (TryGetClientSubscription(clientID, out clientSubscription))
+                if (TryGetClientSubscription(clientID, out SubscriberAdapter clientSubscription))
                 {
                     clientSubscription.Stop();
                     Remove(clientSubscription);
@@ -1834,7 +1715,7 @@ namespace sttp.transport
         private void m_routingTables_ProcessException(object sender, EventArgs<Exception> e) => OnProcessException(MessageLevel.Warning, e.Argument);
 
         // Cipher key rotation timer handler
-        private void m_cipherKeyRotationTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void m_cipherKeyRotationTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             if ((object)m_clientConnections != null)
             {
@@ -1847,7 +1728,7 @@ namespace sttp.transport
         }
 
         // Command channel restart timer handler
-        private void m_commandChannelRestartTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void m_commandChannelRestartTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             if ((object)m_commandChannel != null)
             {
@@ -1883,7 +1764,7 @@ namespace sttp.transport
         {
             Guid clientID = connection.ClientID;
             SubscriberAdapter subscription;
-            string message, setting;
+            string message;
 
             // Handle subscribe
             try
@@ -1927,7 +1808,7 @@ namespace sttp.transport
                         subscription.DataSource = DataSource;
 
                         // Pass subscriber assembly information to connection, if defined
-                        if (subscription.Settings.TryGetValue("assemblyInfo", out setting))
+                        if (subscription.Settings.TryGetValue("assemblyInfo", out string setting))
                             connection.SubscriberInfo = setting;
 
                         // Set up UDP data channel if client has requested this
@@ -1971,8 +1852,7 @@ namespace sttp.transport
                             }
 
                             // Remove any existing cached publication channel since connection is changing
-                            IServer publicationChannel;
-                            m_clientPublicationChannels.TryRemove(clientID, out publicationChannel);
+                            m_clientPublicationChannels.TryRemove(clientID, out IServer publicationChannel);
 
                             // Update payload compression state and strength
                             subscription.UsePayloadCompression = usePayloadCompression;
@@ -2022,18 +1902,6 @@ namespace sttp.transport
                             // The subscription adapter must be started before sending
                             // cached measurements or else they will be ignored
                             subscription.Start();
-
-                            // If client has subscribed to any cached measurements, queue them up for the client
-                            if (TryGetAdapterByName("LatestMeasurementCache", out IActionAdapter cacheAdapter))
-                            {
-                                LatestMeasurementCache cache = cacheAdapter as LatestMeasurementCache;
-
-                                if ((object)cache != null)
-                                {
-                                    IEnumerable<IMeasurement> cachedMeasurements = cache.LatestMeasurements.Where(measurement => subscription.InputMeasurementKeys.Any(key => key.SignalID == measurement.ID));
-                                    subscription.QueueMeasurementsForProcessing(cachedMeasurements);
-                                }
-                            }
 
                             // Spawn routing table recalculation after sending cached measurements--
                             // there is a bit of a race condition that could cause the subscriber to
@@ -2130,7 +1998,6 @@ namespace sttp.transport
                 IDbConnection dbConnection = adoDatabase.Connection;
                 DataSet metadata = new DataSet();
                 DataTable table;
-                Tuple<string, string, int> filterParameters;
                 string sortField;
                 int takeCount;
 
@@ -2169,7 +2036,7 @@ namespace sttp.transport
                     if (table.Columns.Contains("OriginalSource") && !(sendInternalMetadata && sendExternalMetadata))
                         filters.Add($"OriginalSource IS {(sendExternalMetadata ? "NOT" : "")} NULL");
 
-                    if (filterExpressions.TryGetValue(table.TableName, out filterParameters))
+                    if (filterExpressions.TryGetValue(table.TableName, out Tuple<string, string, int> filterParameters))
                     {
                         filters.Add($"({filterParameters.Item1})");
                         sortField = filterParameters.Item2;
@@ -2291,8 +2158,7 @@ namespace sttp.transport
 
             Guid clientID = connection.ClientID;
             Dictionary<string, Tuple<string, string, int>> filterExpressions = new Dictionary<string, Tuple<string, string, int>>(StringComparer.OrdinalIgnoreCase);
-            string message, tableName, filterExpression, sortField;
-            int takeCount;
+            string message;
             Ticks startTime = DateTime.UtcNow.Ticks;
 
             // Attempt to parse out any subscriber provided meta-data filter expressions
@@ -2314,7 +2180,7 @@ namespace sttp.transport
                         foreach (string expression in expressions)
                         {
                             // Attempt to parse filter expression and add it dictionary if successful
-                            if (AdapterBase.ParseFilterExpression(expression, out tableName, out filterExpression, out sortField, out takeCount))
+                            if (AdapterBase.ParseFilterExpression(expression, out string tableName, out string filterExpression, out string sortField, out int takeCount))
                                 filterExpressions.Add(tableName, Tuple.Create(filterExpression, sortField, takeCount));
                         }
                     }
@@ -2406,16 +2272,14 @@ namespace sttp.transport
         private void HandleConfirmNotification(SubscriberConnection connection, byte[] buffer, int startIndex, int length)
         {
             int hash = BigEndian.ToInt32(buffer, startIndex);
-            Dictionary<int, string> notifications;
-            string notification;
 
             if (length >= 4)
             {
                 lock (m_clientNotificationsLock)
                 {
-                    if (m_clientNotifications.TryGetValue(connection.SubscriberID, out notifications))
+                    if (m_clientNotifications.TryGetValue(connection.SubscriberID, out Dictionary<int, string> notifications))
                     {
-                        if (notifications.TryGetValue(hash, out notification))
+                        if (notifications.TryGetValue(hash, out string notification))
                         {
                             notifications.Remove(hash);
                             OnStatusMessage(MessageLevel.Info, $"Subscriber {connection.ConnectionID} confirmed receipt of notification: {notification}.");
@@ -2465,9 +2329,8 @@ namespace sttp.transport
         private byte[] SerializeSignalIndexCache(Guid clientID, SignalIndexCache signalIndexCache)
         {
             byte[] serializedSignalIndexCache = null;
-            SubscriberConnection connection;
 
-            if (m_clientConnections.TryGetValue(clientID, out connection))
+            if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
             {
                 OperationalModes operationalModes = connection.OperationalModes;
                 CompressionModes compressionModes = (CompressionModes)(operationalModes & OperationalModes.CompressionModeMask);
@@ -2507,9 +2370,8 @@ namespace sttp.transport
         private byte[] SerializeMetadata(Guid clientID, DataSet metadata)
         {
             byte[] serializedMetadata = null;
-            SubscriberConnection connection;
 
-            if (m_clientConnections.TryGetValue(clientID, out connection))
+            if (m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
             {
                 OperationalModes operationalModes = connection.OperationalModes;
                 CompressionModes compressionModes = (CompressionModes)(operationalModes & OperationalModes.CompressionModeMask);
@@ -2628,17 +2490,15 @@ namespace sttp.transport
 
                 if (length > 0 && (object)buffer != null)
                 {
-                    SubscriberConnection connection;
-                    ServerCommand command;
                     string message;
                     byte commandByte = buffer[index];
                     index += 5;
 
                     // Attempt to parse solicited server command
-                    bool validServerCommand = Enum.TryParse(commandByte.ToString(), out command);
+                    bool validServerCommand = Enum.TryParse(commandByte.ToString(), out ServerCommand command);
 
                     // Look up this client connection
-                    if (!m_clientConnections.TryGetValue(clientID, out connection))
+                    if (!m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
                     {
                         // Received a request from an unknown client, this request is denied
                         OnStatusMessage(MessageLevel.Warning, $"Ignored {length} byte {(validServerCommand ? command.ToString() : "unidentified")} command request received from an unrecognized client: {clientID}", flags: MessageFlags.UsageIssue);

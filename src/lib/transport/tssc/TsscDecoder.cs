@@ -22,10 +22,9 @@
 //******************************************************************************************************
 
 using System;
-using GSF;
-using GSF.Collections;
+using System.Collections.Generic;
 
-namespace sttp.tssc
+namespace sttp.transport.tssc
 {
     /// <summary>
     /// The decoder for the TSSC protocol.
@@ -45,7 +44,7 @@ namespace sttp.tssc
         private long m_prevTimeDelta4;
 
         private TsscPointMetadata m_lastPoint;
-        private IndexedArray<TsscPointMetadata> m_points;
+        private List<TsscPointMetadata> m_points;
 
         /// <summary>
         /// Creates a decoder for the TSSC protocol.
@@ -66,9 +65,9 @@ namespace sttp.tssc
         /// </remarks>
         public void Reset()
         {
-            m_points = new IndexedArray<TsscPointMetadata>();
+            m_points = new List<TsscPointMetadata>();
             m_lastPoint = new TsscPointMetadata(null, ReadBit, ReadBits5);
-            m_data = EmptyArray<byte>.Empty;
+            m_data = new byte[0];
             m_position = 0;
             m_lastPosition = 0;
             ClearBitStream();
@@ -107,7 +106,7 @@ namespace sttp.tssc
         /// <returns>true if successful, false otherwise.</returns>
         public unsafe bool TryGetMeasurement(out int id, out long timestamp, out uint quality, out float value)
         {
-            TsscPointMetadata nextPoint = null;
+            TsscPointMetadata nextPoint;
 
             if (m_position == m_lastPosition && BitStreamIsEmpty)
             {
@@ -146,12 +145,17 @@ namespace sttp.tssc
             }
 
             id = m_lastPoint.PrevNextPointId1;
-            nextPoint = m_points[m_lastPoint.PrevNextPointId1];
+            nextPoint = id >= m_points.Count ? null : m_points[id];
 
             if (nextPoint == null)
             {
                 nextPoint = new TsscPointMetadata(null, ReadBit, ReadBits5);
+
+                while (id >= m_points.Count)
+                    m_points.Add(null);
+                                    
                 m_points[id] = nextPoint;
+
                 nextPoint.PrevNextPointId1 = id + 1;
             }
 
@@ -181,7 +185,8 @@ namespace sttp.tssc
 
             //Since value will almost always change, 
             //This is not put inside a function call.
-            uint valueRaw = 0;
+            uint valueRaw;
+
             if (code == TsscCodeWords.Value1)
             {
                 valueRaw = nextPoint.PrevValue1;

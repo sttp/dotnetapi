@@ -21,7 +21,7 @@
 //
 //******************************************************************************************************
 
-namespace sttp.tssc
+namespace sttp.transport.tssc
 {
     /// <summary>
     /// The encoding commands supported by TSSC. This class is used by 

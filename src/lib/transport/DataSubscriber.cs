@@ -23,7 +23,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.IO.Compression;
@@ -33,13 +32,16 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
+using System.Timers;
 using System.Xml;
 using sttp.communication;
 using sttp.security;
-using sttp.tssc;
+using sttp.threading;
+using sttp.transport.tssc;
 using sttp.units;
 using TcpClient = sttp.communication.TcpClient;
 using UdpClient = sttp.communication.UdpClient;
+using Timer = System.Timers.Timer;
 
 #pragma warning disable 672
 
@@ -48,8 +50,6 @@ namespace sttp.transport
     /// <summary>
     /// Represents a data subscribing client that will connect to a data publisher for a data subscription.
     /// </summary>
-    [Description("DataSubscriber: client that subscribes to a publishing server for a streaming data.")]
-    [EditorBrowsable(EditorBrowsableState.Advanced)] // Normally defined as an input device protocol
     public class DataSubscriber
     {
         #region [ Members ]
@@ -120,7 +120,7 @@ namespace sttp.transport
         public const bool DefaultUseTransactionForMetadata = true;
 
         /// <summary>
-        /// Default value for <see cref="LoggingPath"/>.
+        /// Default value for <see cref="gggingPath"/>.
         /// </summary>
         public const string DefaultLoggingPath = "ConfigurationCache";
 
@@ -185,7 +185,7 @@ namespace sttp.transport
         /// This event is expected to only be raised when an input adapter has been designed to process
         /// a finite amount of data, e.g., reading a historical range of data during temporal processing.
         /// </remarks>
-        public new event EventHandler<EventArgs<string>> ProcessingComplete;
+        public event EventHandler<EventArgs<string>> ProcessingComplete;
 
         /// <summary>
         /// Occurs when a notification has been received from the <see cref="DataPublisher"/>.
@@ -213,7 +213,7 @@ namespace sttp.transport
         private bool m_tsscResetRequested;
         private TsscDecoder m_tsscDecoder;
         private ushort m_tsscSequenceNumber;
-        private SharedTimer m_dataStreamMonitor;
+        private Timer m_dataStreamMonitor;
         private long m_commandChannelConnectionAttempts;
         private long m_dataChannelConnectionAttempts;
         private volatile SignalIndexCache m_remoteSignalIndexCache;
@@ -227,8 +227,6 @@ namespace sttp.transport
         private long m_monitoredBytesReceived;
         private long m_totalBytesReceived;
         private long m_lastMissingCacheWarning;
-        private Guid m_nodeID;
-        private int m_gatewayProtocolID;
         private SecurityMode m_securityMode;
         private bool m_useMillisecondResolution;
         private bool m_requestNaNValueFilter;
@@ -255,10 +253,6 @@ namespace sttp.transport
         private OperationalModes m_operationalModes;
         private Encoding m_encoding;
         private string m_loggingPath;
-        private RunTimeLog m_runTimeLog;
-        private bool m_bypassingStatistics;
-        //private bool m_dataGapRecoveryEnabled;
-        //private DataGapRecoverer m_dataGapRecoverer;
         private int m_parsingExceptionCount;
         private long m_lastParsingExceptionTime;
         private int m_allowedParsingExceptions;
@@ -271,7 +265,7 @@ namespace sttp.transport
 
         private Ticks m_realTime;
         private Ticks m_lastStatisticsHelperUpdate;
-        private SharedTimer m_subscribedDevicesTimer;
+        private Timer m_subscribedDevicesTimer;
 
         private long m_lifetimeMeasurements;
         private long m_minimumMeasurementsPerSecond;
@@ -316,19 +310,6 @@ namespace sttp.transport
 
             if (Directory.Exists(loggingPath))
                 m_loggingPath = loggingPath;
-
-            // Default to not using transactions for meta-data on SQL server (helps avoid deadlocks)
-            try
-            {
-                using (AdoDataConnection database = new AdoDataConnection("systemSettings"))
-                {
-                    m_useTransactionForMetadata = database.DatabaseType != DatabaseType.SQLServer;
-                }
-            }
-            catch
-            {
-                m_useTransactionForMetadata = DefaultUseTransactionForMetadata;
-            }
 
             DataLossInterval = 10.0D;
 
@@ -477,7 +458,7 @@ namespace sttp.transport
                     if ((object)m_dataStreamMonitor == null)
                     {
                         // Create data stream monitoring timer
-                        m_dataStreamMonitor = Common.TimerScheduler.CreateTimer();
+                        m_dataStreamMonitor = new Timer();
                         m_dataStreamMonitor.Elapsed += m_dataStreamMonitor_Elapsed;
                         m_dataStreamMonitor.AutoReset = true;
                         m_dataStreamMonitor.Enabled = false;
@@ -674,7 +655,7 @@ namespace sttp.transport
         /// basically a delay, or timer interval, over which to process data. A value of -1 means to use the default processing
         /// interval while a value of 0 means to process data as fast as possible.
         /// </remarks>
-        public override int ProcessingInterval
+        public int ProcessingInterval
         {
             get => base.ProcessingInterval;
             set
@@ -754,9 +735,6 @@ namespace sttp.transport
                     if (AutoStart)
                         SubscribeToOutputMeasurements(true);
                 }
-
-                //if ((object)m_dataGapRecoverer != null)
-                //    m_dataGapRecoverer.DataSource = value;
             }
         }
 
@@ -782,29 +760,10 @@ namespace sttp.transport
             }
         }
 
-        ///// <summary>
-        ///// Gets or sets output measurements that the <see cref="AdapterBase"/> will produce, if any.
-        ///// </summary>
-        //public override IMeasurement[] OutputMeasurements
-        //{
-        //    get
-        //    {
-        //        return base.OutputMeasurements;
-        //    }
-
-        //    set
-        //    {
-        //        base.OutputMeasurements = value;
-
-        //        if ((object)m_dataGapRecoverer != null)
-        //            m_dataGapRecoverer.FilterExpression = this.OutputMeasurementKeys().Select(key => key.SignalID.ToString()).ToDelimitedString(';');
-        //    }
-        //}
-
         /// <summary>
         /// Gets connection info for adapter, if any.
         /// </summary>
-        public override string ConnectionInfo
+        public string ConnectionInfo
         {
             get
             {
@@ -860,20 +819,6 @@ namespace sttp.transport
                     status.Append("No data reconnect interval: disabled");
 
                 status.AppendLine();
-
-                //status.AppendFormat("    Data gap recovery mode: {0}", m_dataGapRecoveryEnabled ? "Enabled" : "Disabled");
-                //status.AppendLine();
-
-                //if (m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null)
-                //    status.Append(m_dataGapRecoverer.Status);
-
-                if ((object)m_runTimeLog != null)
-                {
-                    status.AppendLine();
-                    status.AppendLine("Run-Time Log Status".CenterText(50));
-                    status.AppendLine("-------------------".CenterText(50));
-                    status.AppendFormat(m_runTimeLog.Status);
-                }
 
                 if ((object)m_dataChannel != null)
                 {
@@ -1054,22 +999,6 @@ namespace sttp.transport
                         CommandChannel = null;
                         DataChannel = null;
 
-                        //if ((object)m_dataGapRecoverer != null)
-                        //{
-                        //    m_dataGapRecoverer.RecoveredMeasurements -= m_dataGapRecoverer_RecoveredMeasurements;
-                        //    m_dataGapRecoverer.StatusMessage -= m_dataGapRecoverer_StatusMessage;
-                        //    m_dataGapRecoverer.ProcessException -= m_dataGapRecoverer_ProcessException;
-                        //    m_dataGapRecoverer.Dispose();
-                        //    m_dataGapRecoverer = null;
-                        //}
-
-                        if ((object)m_runTimeLog != null)
-                        {
-                            m_runTimeLog.ProcessException -= m_runTimeLog_ProcessException;
-                            m_runTimeLog.Dispose();
-                            m_runTimeLog = null;
-                        }
-
                         if ((object)m_subscribedDevicesTimer != null)
                         {
                             m_subscribedDevicesTimer.Elapsed -= SubscribedDevicesTimer_Elapsed;
@@ -1091,19 +1020,12 @@ namespace sttp.transport
         /// </summary>
         public override void Initialize()
         {
-            base.Initialize();
+            //base.Initialize();
 
             Dictionary<string, string> settings = Settings;
-            string setting;
-
-            OperationalModes operationalModes;
-            CompressionModes compressionModes;
-            int metadataSynchronizationTimeout;
-            double interval;
-            int bufferSize;
 
             // See if user has opted for different operational modes
-            if (settings.TryGetValue("operationalModes", out setting) && Enum.TryParse(setting, true, out operationalModes))
+            if (settings.TryGetValue("operationalModes", out string setting) && Enum.TryParse(setting, true, out OperationalModes operationalModes))
                 OperationalModes = operationalModes;
 
             // Set the security mode if explicitly defined
@@ -1111,7 +1033,7 @@ namespace sttp.transport
                 m_securityMode = SecurityMode.None;
 
             // Apply gateway compression mode to operational mode flags
-            if (settings.TryGetValue("compressionModes", out setting) && Enum.TryParse(setting, true, out compressionModes))
+            if (settings.TryGetValue("compressionModes", out setting) && Enum.TryParse(setting, true, out CompressionModes compressionModes))
                 CompressionModes = compressionModes;
 
             // Check if output measurements should be filtered to only those belonging to the subscriber
@@ -1155,7 +1077,7 @@ namespace sttp.transport
                 ReceiveExternalMetadata = setting.ParseBoolean();
 
             // Check if user has defined a meta-data synchronization timeout
-            if (settings.TryGetValue("metadataSynchronizationTimeout", out setting) && int.TryParse(setting, out metadataSynchronizationTimeout))
+            if (settings.TryGetValue("metadataSynchronizationTimeout", out setting) && int.TryParse(setting, out int metadataSynchronizationTimeout))
                 m_metadataSynchronizationTimeout = metadataSynchronizationTimeout;
 
             // Check if user has defined a flag for using a transaction during meta-data synchronization
@@ -1200,11 +1122,11 @@ namespace sttp.transport
                 m_useSourcePrefixNames = setting.ParseBoolean();
 
             // Define data loss interval
-            if (settings.TryGetValue("dataLossInterval", out setting) && double.TryParse(setting, out interval))
+            if (settings.TryGetValue("dataLossInterval", out setting) && double.TryParse(setting, out double interval))
                 DataLossInterval = interval;
 
             // Define buffer size
-            if (!settings.TryGetValue("bufferSize", out setting) || !int.TryParse(setting, out bufferSize))
+            if (!settings.TryGetValue("bufferSize", out setting) || !int.TryParse(setting, out int bufferSize))
                 bufferSize = ClientBase.DefaultReceiveBufferSize;
 
             if (settings.TryGetValue("useLocalClockAsRealTime", out setting))
@@ -1292,67 +1214,6 @@ namespace sttp.transport
                     OnStatusMessage(MessageLevel.Info, $"Logging path \"{setting}\" not found, defaulting to \"{FilePath.GetAbsolutePath("")}\"...", flags: MessageFlags.UsageIssue);
             }
 
-            //// Initialize data gap recovery processing, if requested
-            //if (settings.TryGetValue("dataGapRecovery", out setting))
-            //{
-            //    // Make sure setting exists to allow user to by-pass phasor data source validation at startup
-            //    ConfigurationFile configFile = ConfigurationFile.Current;
-            //    CategorizedSettingsElementCollection systemSettings = configFile.Settings["systemSettings"];
-            //    CategorizedSettingsElement dataGapRecoveryEnabledSetting = systemSettings["DataGapRecoveryEnabled"];
-
-            //    // See if this node should process phasor source validation
-            //    if ((object)dataGapRecoveryEnabledSetting == null || dataGapRecoveryEnabledSetting.ValueAsBoolean())
-            //    {
-            //        // Example connection string for data gap recovery:
-            //        //  dataGapRecovery={enabled=true; recoveryStartDelay=10.0; minimumRecoverySpan=0.0; maximumRecoverySpan=3600.0}
-            //        Dictionary<string, string> dataGapSettings = setting.ParseKeyValuePairs();
-
-            //        if (dataGapSettings.TryGetValue("enabled", out setting) && setting.ParseBoolean())
-            //        {
-            //            // Remove dataGapRecovery connection setting from command channel connection string, if defined there.
-            //            // This will prevent any recursive data gap recovery operations from being established:
-            //            Dictionary<string, string> connectionSettings = m_commandChannel.ConnectionString.ParseKeyValuePairs();
-            //            connectionSettings.Remove("dataGapRecovery");
-            //            connectionSettings.Remove("autoConnect");
-            //            connectionSettings.Remove("synchronizeMetadata");
-            //            connectionSettings.Remove("outputMeasurements");
-
-            //            // Note that the data gap recoverer will connect on the same command channel port as
-            //            // the real-time subscriber (TCP only)
-            //            m_dataGapRecoveryEnabled = true;
-            //            m_dataGapRecoverer = new DataGapRecoverer();
-            //            m_dataGapRecoverer.SourceConnectionName = Name;
-            //            m_dataGapRecoverer.DataSource = DataSource;
-            //            m_dataGapRecoverer.ConnectionString = string.Join("; ", $"autoConnect=false; synchronizeMetadata=false{(string.IsNullOrWhiteSpace(m_loggingPath) ? "" : "; loggingPath=" + m_loggingPath)}", dataGapSettings.JoinKeyValuePairs(), connectionSettings.JoinKeyValuePairs());
-            //            m_dataGapRecoverer.FilterExpression = this.OutputMeasurementKeys().Select(key => key.SignalID.ToString()).ToDelimitedString(';');
-            //            m_dataGapRecoverer.RecoveredMeasurements += m_dataGapRecoverer_RecoveredMeasurements;
-            //            m_dataGapRecoverer.StatusMessage += m_dataGapRecoverer_StatusMessage;
-            //            m_dataGapRecoverer.ProcessException += m_dataGapRecoverer_ProcessException;
-            //            m_dataGapRecoverer.Initialize();
-            //        }
-            //        else
-            //        {
-            //            m_dataGapRecoveryEnabled = false;
-            //        }
-            //    }
-            //}
-            //else
-            //{
-            //    m_dataGapRecoveryEnabled = false;
-            //}
-
-            if (!settings.TryGetValue("BypassStatistics", out setting) || !setting.ParseBoolean())
-            {
-                EventHandler statisticsCalculated = (sender, args) => ResetMeasurementsPerSecondCounters();
-                StatisticsEngine.Register(this, "Subscriber", "SUB");
-                StatisticsEngine.Calculated += statisticsCalculated;
-                Disposed += (sender, args) => StatisticsEngine.Calculated -= statisticsCalculated;
-            }
-            else
-            {
-                m_bypassingStatistics = true;
-            }
-
             if (PersistConnectionForMetadata)
                 m_commandChannel.ConnectAsync();
 
@@ -1405,9 +1266,7 @@ namespace sttp.transport
             // measurements that could now be applicable as desired output measurements.
             if (!initialCall)
             {
-                string setting;
-
-                if (Settings.TryGetValue("outputMeasurements", out setting))
+                if (Settings.TryGetValue("outputMeasurements", out string setting))
                     OutputMeasurements = ParseOutputMeasurements(DataSource, true, setting);
 
                 OutputSourceIDs = OutputSourceIDs;
@@ -1661,10 +1520,9 @@ namespace sttp.transport
                     // Parse connection string to see if it contains a data channel definition
                     Dictionary<string, string> settings = connectionString.ParseKeyValuePairs();
                     UdpClient dataChannel = null;
-                    string setting;
 
                     // Track specified time inclusion for later deserialization
-                    if (settings.TryGetValue("includeTime", out setting))
+                    if (settings.TryGetValue("includeTime", out string setting))
                         m_includeTime = setting.ParseBoolean();
                     else
                         m_includeTime = true;
@@ -1784,100 +1642,10 @@ namespace sttp.transport
         /// <summary>
         /// Initiate a meta-data refresh.
         /// </summary>
-        [AdapterCommand("Initiates a meta-data refresh.", "Administrator", "Editor")]
         public virtual void RefreshMetadata()
         {
             SendServerCommand(ServerCommand.MetaDataRefresh, m_metadataFilters);
         }
-
-        ///// <summary>
-        ///// Log a data gap for data gap recovery.
-        ///// </summary>
-        ///// <param name="timeString">The string representing the data gap.</param>
-        //[AdapterCommand("Logs a data gap for data gap recovery.", "Administrator", "Editor")]
-        //public virtual void LogDataGap(string timeString)
-        //{
-        //    DateTimeOffset start;
-        //    DateTimeOffset end = default(DateTimeOffset);
-        //    string[] split = timeString.Split(';');
-
-        //    if (!m_dataGapRecoveryEnabled)
-        //        throw new InvalidOperationException("Data gap recovery is not enabled.");
-
-        //    if (split.Length != 2)
-        //        throw new FormatException("Invalid format for time string - ex: 2014-03-27 02:10:47.566;2014-03-27 02:10:59.733");
-
-        //    string startTime = split[0];
-        //    string endTime = split[1];
-
-        //    bool parserSuccessful =
-        //        DateTimeOffset.TryParse(startTime, CultureInfo.CurrentCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowInnerWhite, out start) &&
-        //        DateTimeOffset.TryParse(endTime, CultureInfo.CurrentCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowInnerWhite, out end);
-
-        //    if (!parserSuccessful)
-        //        throw new FormatException("Invalid format for time string - ex: 2014-03-27 02:10:47.566;2014-03-27 02:10:59.733");
-
-        //    m_dataGapRecoverer?.LogDataGap(start, end, true);
-        //}
-
-        ///// <summary>
-        ///// Remove a data gap from data gap recovery.
-        ///// </summary>
-        ///// <param name="timeString">The string representing the data gap.</param>
-        //[AdapterCommand("Removes a data gap from data gap recovery.", "Administrator", "Editor")]
-        //public virtual string RemoveDataGap(string timeString)
-        //{
-        //    DateTimeOffset start;
-        //    DateTimeOffset end = default(DateTimeOffset);
-        //    string[] split = timeString.Split(';');
-
-        //    if (!m_dataGapRecoveryEnabled)
-        //        throw new InvalidOperationException("Data gap recovery is not enabled.");
-
-        //    if (split.Length != 2)
-        //        throw new FormatException("Invalid format for time string - ex: 2014-03-27 02:10:47.566;2014-03-27 02:10:59.733");
-
-        //    string startTime = split[0];
-        //    string endTime = split[1];
-
-        //    bool parserSuccessful =
-        //        DateTimeOffset.TryParse(startTime, CultureInfo.CurrentCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowInnerWhite, out start) &&
-        //        DateTimeOffset.TryParse(endTime, CultureInfo.CurrentCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowInnerWhite, out end);
-
-        //    if (!parserSuccessful)
-        //        throw new FormatException("Invalid format for time string - ex: 2014-03-27 02:10:47.566;2014-03-27 02:10:59.733");
-
-        //    if (m_dataGapRecoverer?.RemoveDataGap(start, end) ?? false)
-        //        return "Data gap successfully removed.";
-        //    else
-        //        return "Data gap not found.";
-        //}
-
-        ///// <summary>
-        ///// Displays the contents of the outage log.
-        ///// </summary>
-        ///// <returns>The contents of the outage log.</returns>
-        //[AdapterCommand("Displays data gaps queued for data gap recovery.", "Administrator", "Editor", "Viewer")]
-        //public virtual string DumpOutageLog()
-        //{
-        //    if (m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null)
-        //        return Environment.NewLine + m_dataGapRecoverer.DumpOutageLog();
-
-        //    throw new InvalidOperationException("Data gap recovery not enabled");
-        //}
-
-        ///// <summary>
-        ///// Gets the status of the temporal <see cref="DataSubscriber"/> used by the data gap recovery module.
-        ///// </summary>
-        ///// <returns>Status of the temporal <see cref="DataSubscriber"/> used by the data gap recovery module.</returns>
-        //[AdapterCommand("Gets the status of the temporal subscription used by the data gap recovery module.", "Administrator", "Editor", "Viewer")]
-        //public virtual string GetDataGapRecoverySubscriptionStatus()
-        //{
-        //    if (m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null)
-        //        return m_dataGapRecoverer.TemporalSubscriptionStatus;
-
-        //    return "Data gap recovery not enabled";
-        //}
 
         /// <summary>
         /// Spawn meta-data synchronization.
@@ -2004,7 +1772,7 @@ namespace sttp.transport
 
             if (m_useLocalClockAsRealTime && (object)m_subscribedDevicesTimer == null)
             {
-                m_subscribedDevicesTimer = Common.TimerScheduler.CreateTimer(1000);
+                m_subscribedDevicesTimer = new Timer(1000);
                 m_subscribedDevicesTimer.Elapsed += SubscribedDevicesTimer_Elapsed;
             }
 
@@ -2162,30 +1930,6 @@ namespace sttp.transport
                                 // At the point when data is being received, data monitor should be enabled
                                 if ((object)m_dataStreamMonitor != null && !m_dataStreamMonitor.Enabled)
                                     m_dataStreamMonitor.Enabled = true;
-
-                                // Establish run-time log for subscriber
-                                if (m_autoConnect /* || m_dataGapRecoveryEnabled*/)
-                                {
-                                    if ((object)m_runTimeLog == null)
-                                    {
-                                        m_runTimeLog = new RunTimeLog();
-                                        m_runTimeLog.FileName = GetLoggingPath(Name + "_RunTimeLog.txt");
-                                        m_runTimeLog.ProcessException += m_runTimeLog_ProcessException;
-                                        m_runTimeLog.Initialize();
-                                    }
-                                    else
-                                    {
-                                        // Mark the start of any data transmissions
-                                        m_runTimeLog.StartTime = DateTimeOffset.UtcNow;
-                                        m_runTimeLog.Enabled = true;
-                                    }
-                                }
-
-                                //// The duration between last disconnection and start of data transmissions
-                                //// represents a gap in data - if data gap recovery is enabled, we log
-                                //// this as a gap for recovery:
-                                //if (m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null)
-                                //    m_dataGapRecoverer.LogDataGap(m_runTimeLog.StopTime, DateTimeOffset.UtcNow);
                             }
 
                             // Track total data packet bytes received from any channel
@@ -2396,7 +2140,6 @@ namespace sttp.transport
                             uint sequenceNumber = BigEndian.ToUInt32(buffer, responseIndex);
                             int cacheIndex = (int)(sequenceNumber - m_expectedBufferBlockSequenceNumber);
                             BufferBlockMeasurement bufferBlockMeasurement;
-                            MeasurementKey measurementKey;
                             int signalIndex;
 
                             // Check if this buffer block has already been processed (e.g., mistaken retransmission due to timeout)
@@ -2408,7 +2151,7 @@ namespace sttp.transport
                                 // Get measurement key from signal index cache
                                 signalIndex = BigEndian.ToUInt16(buffer, responseIndex + 4);
 
-                                if (!m_signalIndexCache.Reference.TryGetValue(signalIndex, out measurementKey))
+                                if (!m_signalIndexCache.Reference.TryGetValue(signalIndex, out MeasurementKey measurementKey))
                                     throw new InvalidOperationException("Failed to find associated signal identification for runtime ID " + signalIndex);
 
                                 // Skip the sequence number and signal index when creating the buffer block measurement
@@ -2609,12 +2352,8 @@ namespace sttp.transport
 
             Measurement measurement;
             MeasurementKey key = null;
-            int id;
-            long time;
-            uint quality;
-            float value;
 
-            while (m_tsscDecoder.TryGetMeasurement(out id, out time, out quality, out value))
+            while (m_tsscDecoder.TryGetMeasurement(out int id, out long time, out uint quality, out float value))
             {
                 if (m_signalIndexCache?.Reference.TryGetValue(id, out key) ?? false)
                 {
@@ -2753,581 +2492,9 @@ namespace sttp.transport
 
                 // Track total meta-data synchronization process time
                 Ticks startTime = DateTime.UtcNow.Ticks;
-                DateTime updateTime;
                 DateTime latestUpdateTime = DateTime.MinValue;
 
-                // Open the configuration database using settings found in the config file
-                using (AdoDataConnection database = new AdoDataConnection("systemSettings"))
-                using (IDbCommand command = database.Connection.CreateCommand())
-                {
-                    IDbTransaction transaction = null;
-
-                    if (m_useTransactionForMetadata)
-                        transaction = database.Connection.BeginTransaction(database.DefaultIsloationLevel);
-
-                    try
-                    {
-                        if ((object)transaction != null)
-                            command.Transaction = transaction;
-
-                        // Query the actual record ID based on the known run-time ID for this subscriber device
-                        object sourceID = command.ExecuteScalar($"SELECT SourceID FROM Runtime WHERE ID = {ID} AND SourceTable='Device'", m_metadataSynchronizationTimeout);
-
-                        if (sourceID == null || sourceID == DBNull.Value)
-                            return;
-
-                        int parentID = Convert.ToInt32(sourceID);
-
-                        // Validate that the subscriber device is marked as a concentrator (we are about to associate children devices with it)
-                        if (!command.ExecuteScalar($"SELECT IsConcentrator FROM Device WHERE ID = {parentID}", m_metadataSynchronizationTimeout).ToString().ParseBoolean())
-                            command.ExecuteNonQuery($"UPDATE Device SET IsConcentrator = 1 WHERE ID = {parentID}", m_metadataSynchronizationTimeout);
-
-                        // Get any historian associated with the subscriber device
-                        object historianID = command.ExecuteScalar($"SELECT HistorianID FROM Device WHERE ID = {parentID}", m_metadataSynchronizationTimeout);
-
-                        // Determine the active node ID - we cache this since this value won't change for the lifetime of this class
-                        if (m_nodeID == Guid.Empty)
-                            m_nodeID = Guid.Parse(command.ExecuteScalar($"SELECT NodeID FROM IaonInputAdapter WHERE ID = {(int)ID}", m_metadataSynchronizationTimeout).ToString());
-
-                        // Determine the protocol record auto-inc ID value for the gateway transport protocol (GEP) - this value is also cached since it shouldn't change for the lifetime of this class
-                        if (m_gatewayProtocolID == 0)
-                            m_gatewayProtocolID = int.Parse(command.ExecuteScalar("SELECT ID FROM Protocol WHERE Acronym='GatewayTransport'", m_metadataSynchronizationTimeout).ToString());
-
-                        // Ascertain total number of actions required for all meta-data synchronization so some level feed back can be provided on progress
-                        InitSyncProgress(metadata.Tables.Cast<DataTable>().Select(dataTable => (long)dataTable.Rows.Count).Sum() + 3);
-
-                        // Prefix all children devices with the name of the parent since the same device names could appear in different connections (helps keep device names unique)
-                        string sourcePrefix = m_useSourcePrefixNames ? Name + "!" : "";
-                        Dictionary<string, int> deviceIDs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                        string deviceAcronym, signalTypeAcronym;
-                        decimal longitude, latitude;
-                        decimal? location;
-                        object originalSource;
-                        int deviceID;
-
-                        // Check to see if data for the "DeviceDetail" table was included in the meta-data
-                        if (metadata.Tables.Contains("DeviceDetail"))
-                        {
-                            DataTable deviceDetail = metadata.Tables["DeviceDetail"];
-                            List<Guid> uniqueIDs = new List<Guid>();
-                            DataRow[] deviceRows;
-
-                            // Define SQL statement to query if this device is already defined (this should always be based on the unique guid-based device ID)
-                            string deviceExistsSql = database.ParameterizedQueryString("SELECT COUNT(*) FROM Device WHERE UniqueID = {0}", "uniqueID");
-
-                            // Define SQL statement to insert new device record
-                            string insertDeviceSql = database.ParameterizedQueryString("INSERT INTO Device(NodeID, ParentID, HistorianID, Acronym, Name, ProtocolID, FramesPerSecond, OriginalSource, AccessID, Longitude, Latitude, ContactList, IsConcentrator, Enabled) " +
-                                                                                       "VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, 0, 1)", "nodeID", "parentID", "historianID", "acronym", "name", "protocolID", "framesPerSecond", "originalSource", "accessID", "longitude", "latitude", "contactList");
-
-                            // Define SQL statement to update device's guid-based unique ID after insert
-                            string updateDeviceUniqueIDSql = database.ParameterizedQueryString("UPDATE Device SET UniqueID = {0} WHERE Acronym = {1}", "uniqueID", "acronym");
-
-                            // Define SQL statement to query if a device can be safely updated
-                            string deviceIsUpdatableSql = database.ParameterizedQueryString("SELECT COUNT(*) FROM Device WHERE UniqueID = {0} AND (ParentID <> {1} OR ParentID IS NULL)", "uniqueID", "parentID");
-
-                            // Define SQL statement to update existing device record
-                            string updateDeviceSql = database.ParameterizedQueryString("UPDATE Device SET Acronym = {0}, Name = {1}, OriginalSource = {2}, ProtocolID = {3}, FramesPerSecond = {4}, HistorianID = {5}, AccessID = {6}, Longitude = {7}, Latitude = {8}, ContactList = {9} WHERE UniqueID = {10}",
-                                                                                       "acronym", "name", "originalSource", "protocolID", "framesPerSecond", "historianID", "accessID", "longitude", "latitude", "contactList", "uniqueID");
-
-                            // Define SQL statement to retrieve device's auto-inc ID based on its unique guid-based ID
-                            string queryDeviceIDSql = database.ParameterizedQueryString("SELECT ID FROM Device WHERE UniqueID = {0}", "uniqueID");
-
-                            // Define SQL statement to retrieve all unique device ID's for the current parent to check for mismatches
-                            string queryUniqueDeviceIDsSql = database.ParameterizedQueryString("SELECT UniqueID FROM Device WHERE ParentID = {0}", "parentID");
-
-                            // Define SQL statement to remove device records that no longer exist in the meta-data
-                            string deleteDeviceSql = database.ParameterizedQueryString("DELETE FROM Device WHERE UniqueID = {0}", "uniqueID");
-
-                            // Determine which device rows should be synchronized based on operational mode flags
-                            if (ReceiveInternalMetadata && ReceiveExternalMetadata)
-                                deviceRows = deviceDetail.Select();
-                            else if (ReceiveInternalMetadata)
-                                deviceRows = deviceDetail.Select("OriginalSource IS NULL");
-                            else if (ReceiveExternalMetadata)
-                                deviceRows = deviceDetail.Select("OriginalSource IS NOT NULL");
-                            else
-                                deviceRows = new DataRow[0];
-
-                            // Check existence of optional meta-data fields
-                            DataColumnCollection deviceDetailColumns = deviceDetail.Columns;
-                            bool accessIDFieldExists = deviceDetailColumns.Contains("AccessID");
-                            bool longitudeFieldExists = deviceDetailColumns.Contains("Longitude");
-                            bool latitudeFieldExists = deviceDetailColumns.Contains("Latitude");
-                            bool companyAcronymFieldExists = deviceDetailColumns.Contains("CompanyAcronym");
-                            bool protocolNameFieldExists = deviceDetailColumns.Contains("ProtocolName");
-                            bool vendorAcronymFieldExists = deviceDetailColumns.Contains("VendorAcronym");
-                            bool vendorDeviceNameFieldExists = deviceDetailColumns.Contains("VendorDeviceName");
-                            bool interconnectionNameFieldExists = deviceDetailColumns.Contains("InterconnectionName");
-                            bool updatedOnFieldExists = deviceDetailColumns.Contains("UpdatedOn");
-
-                            // Older versions of GEP did not include the AccessID field, so this is treated as optional
-                            int accessID = 0;
-
-                            foreach (DataRow row in deviceRows)
-                            {
-                                Guid uniqueID = Guid.Parse(row.Field<object>("UniqueID").ToString());
-                                bool recordNeedsUpdating;
-
-                                // Track unique device Guids in this meta-data session, we'll need to remove any old associated devices that no longer exist
-                                uniqueIDs.Add(uniqueID);
-
-                                // Determine if record has changed since last synchronization
-                                if (updatedOnFieldExists)
-                                {
-                                    try
-                                    {
-                                        updateTime = Convert.ToDateTime(row["UpdatedOn"]);
-                                        recordNeedsUpdating = updateTime > m_lastMetaDataRefreshTime;
-
-                                        if (updateTime > latestUpdateTime)
-                                            latestUpdateTime = updateTime;
-                                    }
-                                    catch
-                                    {
-                                        recordNeedsUpdating = true;
-                                    }
-                                }
-                                else
-                                {
-                                    recordNeedsUpdating = true;
-                                }
-
-                                // We will synchronize meta-data only if the source owns this device and it's not defined as a concentrator (these should normally be filtered by publisher - but we check just in case).
-                                if (!row["IsConcentrator"].ToNonNullString("0").ParseBoolean())
-                                {
-                                    if (accessIDFieldExists)
-                                        accessID = row.ConvertField<int>("AccessID");
-
-                                    // Get longitude and latitude values if they are defined
-                                    longitude = 0M;
-                                    latitude = 0M;
-
-                                    if (longitudeFieldExists)
-                                    {
-                                        location = row.ConvertNullableField<decimal>("Longitude");
-
-                                        if (location.HasValue)
-                                            longitude = location.Value;
-                                    }
-
-                                    if (latitudeFieldExists)
-                                    {
-                                        location = row.ConvertNullableField<decimal>("Latitude");
-
-                                        if (location.HasValue)
-                                            latitude = location.Value;
-                                    }
-
-                                    // Save any reported extraneous values from device meta-data in connection string formatted contact list - all fields are considered optional
-                                    Dictionary<string, string> contactList = new Dictionary<string, string>();
-
-                                    if (companyAcronymFieldExists)
-                                        contactList["companyAcronym"] = row.Field<string>("CompanyAcronym") ?? string.Empty;
-
-                                    if (protocolNameFieldExists)
-                                        contactList["protocolName"] = row.Field<string>("ProtocolName") ?? string.Empty;
-
-                                    if (vendorAcronymFieldExists)
-                                        contactList["vendorAcronym"] = row.Field<string>("VendorAcronym") ?? string.Empty;
-
-                                    if (vendorDeviceNameFieldExists)
-                                        contactList["vendorDeviceName"] = row.Field<string>("VendorDeviceName") ?? string.Empty;
-
-                                    if (interconnectionNameFieldExists)
-                                        contactList["interconnectionName"] = row.Field<string>("InterconnectionName") ?? string.Empty;
-
-                                    // Determine if device record already exists
-                                    if (Convert.ToInt32(command.ExecuteScalar(deviceExistsSql, m_metadataSynchronizationTimeout, database.Guid(uniqueID))) == 0)
-                                    {
-                                        // Insert new device record
-                                        command.ExecuteNonQuery(insertDeviceSql, m_metadataSynchronizationTimeout, database.Guid(m_nodeID), parentID, historianID, sourcePrefix + row.Field<string>("Acronym"), row.Field<string>("Name"), m_gatewayProtocolID, row.ConvertField<int>("FramesPerSecond"),
-                                                                m_internal ? (object)DBNull.Value : string.IsNullOrEmpty(row.Field<string>("ParentAcronym")) ? sourcePrefix + row.Field<string>("Acronym") : sourcePrefix + row.Field<string>("ParentAcronym"), accessID, longitude, latitude, contactList.JoinKeyValuePairs());
-
-                                        // Guids are normally auto-generated during insert - after insertion update the Guid so that it matches the source data. Most of the database
-                                        // scripts have triggers that support properly assigning the Guid during an insert, but this code ensures the Guid will always get assigned.
-                                        command.ExecuteNonQuery(updateDeviceUniqueIDSql, m_metadataSynchronizationTimeout, database.Guid(uniqueID), sourcePrefix + row.Field<string>("Acronym"));
-                                    }
-                                    else if (recordNeedsUpdating)
-                                    {
-                                        // Perform safety check to preserve device records which are not safe to overwrite
-                                        if (Convert.ToInt32(command.ExecuteScalar(deviceIsUpdatableSql, m_metadataSynchronizationTimeout, database.Guid(uniqueID), parentID)) > 0)
-                                            continue;
-
-                                        // Gateway is assuming ownership of the device records when the "internal" flag is true - this means the device's measurements can be forwarded to another party. From a device record perspective,
-                                        // ownership is inferred by setting 'OriginalSource' to null. When gateway doesn't own device records (i.e., the "internal" flag is false), this means the device's measurements can only be consumed
-                                        // locally - from a device record perspective this means the 'OriginalSource' field is set to the acronym of the PDC or PMU that generated the source measurements. This field allows a mirrored source
-                                        // restriction to be implemented later to ensure all devices in an output protocol came from the same original source connection, if desired.
-                                        originalSource = m_internal ? (object)DBNull.Value : string.IsNullOrEmpty(row.Field<string>("ParentAcronym")) ? sourcePrefix + row.Field<string>("Acronym") : sourcePrefix + row.Field<string>("ParentAcronym");
-
-                                        // Update existing device record
-                                        command.ExecuteNonQuery(updateDeviceSql, m_metadataSynchronizationTimeout, sourcePrefix + row.Field<string>("Acronym"), row.Field<string>("Name"), originalSource, m_gatewayProtocolID, row.ConvertField<int>("FramesPerSecond"), historianID, accessID, longitude, latitude, contactList.JoinKeyValuePairs(), database.Guid(uniqueID));
-                                    }
-                                }
-
-                                // Capture local device ID auto-inc value for measurement association
-                                deviceIDs[row.Field<string>("Acronym")] = Convert.ToInt32(command.ExecuteScalar(queryDeviceIDSql, m_metadataSynchronizationTimeout, database.Guid(uniqueID)));
-
-                                // Periodically notify user about synchronization progress
-                                UpdateSyncProgress();
-                            }
-
-                            // Remove any device records associated with this subscriber that no longer exist in the meta-data
-                            if (uniqueIDs.Count > 0)
-                            {
-                                // Sort unique ID list so that binary search can be used for quick lookups
-                                uniqueIDs.Sort();
-
-                                DataTable deviceUniqueIDs = command.RetrieveData(database.AdapterType, queryUniqueDeviceIDsSql, m_metadataSynchronizationTimeout, parentID);
-                                Guid uniqueID;
-
-                                foreach (DataRow deviceRow in deviceUniqueIDs.Rows)
-                                {
-                                    uniqueID = database.Guid(deviceRow, "UniqueID");
-
-                                    // Remove any devices in the database that are associated with the parent device and do not exist in the meta-data
-                                    if (uniqueIDs.BinarySearch(uniqueID) < 0)
-                                        command.ExecuteNonQuery(deleteDeviceSql, m_metadataSynchronizationTimeout, database.Guid(uniqueID));
-                                }
-                                UpdateSyncProgress();
-                            }
-                        }
-
-                        // Check to see if data for the "MeasurementDetail" table was included in the meta-data
-                        if (metadata.Tables.Contains("MeasurementDetail"))
-                        {
-                            DataTable measurementDetail = metadata.Tables["MeasurementDetail"];
-                            List<Guid> signalIDs = new List<Guid>();
-                            DataRow[] measurementRows;
-
-                            // Define SQL statement to query if this measurement is already defined (this should always be based on the unique signal ID Guid)
-                            string measurementExistsSql = database.ParameterizedQueryString("SELECT COUNT(*) FROM Measurement WHERE SignalID = {0}", "signalID");
-
-                            // Define SQL statement to insert new measurement record
-                            string insertMeasurementSql = database.ParameterizedQueryString("INSERT INTO Measurement(DeviceID, HistorianID, PointTag, AlternateTag, SignalTypeID, PhasorSourceIndex, SignalReference, Description, Internal, Subscribed, Enabled) " +
-                                                                                            "VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, 0, 1)", "deviceID", "historianID", "pointTag", "alternateTag", "signalTypeID", "phasorSourceIndex", "signalReference", "description", "internal");
-
-                            // Define SQL statement to update measurement's signal ID after insert
-                            string updateMeasurementSignalIDSql = database.ParameterizedQueryString("UPDATE Measurement SET SignalID = {0}, AlternateTag = NULL WHERE AlternateTag = {1}", "signalID", "alternateTag");
-
-                            // Define SQL statement to update existing measurement record
-                            string updateMeasurementSql = database.ParameterizedQueryString("UPDATE Measurement SET HistorianID = {0}, PointTag = {1}, SignalTypeID = {2}, PhasorSourceIndex = {3}, SignalReference = {4}, Description = {5}, Internal = {6} WHERE SignalID = {7}",
-                                                                                            "historianID", "pointTag", "signalTypeID", "phasorSourceIndex", "signalReference", "description", "internal", "signalID");
-
-                            // Define SQL statement to retrieve all measurement signal ID's for the current parent to check for mismatches - note that we use the ActiveMeasurements view
-                            // since it associates measurements with their top-most parent runtime device ID, this allows us to easily query all measurements for the parent device
-                            string queryMeasurementSignalIDsSql = database.ParameterizedQueryString("SELECT SignalID FROM ActiveMeasurement WHERE DeviceID = {0}", "deviceID");
-
-                            // Define SQL statement to retrieve measurement's associated device ID, i.e., actual record ID, based on measurement's signal ID
-                            string queryMeasurementDeviceIDSql = database.ParameterizedQueryString("SELECT DeviceID FROM Measurement WHERE SignalID = {0}", "signalID");
-
-                            // Load signal type ID's from local database associated with their acronym for proper signal type translation
-                            Dictionary<string, int> signalTypeIDs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-                            foreach (DataRow row in command.RetrieveData(database.AdapterType, "SELECT ID, Acronym FROM SignalType", m_metadataSynchronizationTimeout).Rows)
-                            {
-                                signalTypeAcronym = row.Field<string>("Acronym");
-
-                                if (!string.IsNullOrWhiteSpace(signalTypeAcronym))
-                                    signalTypeIDs[signalTypeAcronym] = row.ConvertField<int>("ID");
-                            }
-
-                            // Define local signal type ID deletion exclusion set
-                            List<int> excludedSignalTypeIDs = new List<int>();
-                            int signalTypeID;
-
-                            // We are intentionally ignoring CALC and ALRM signals during measurement deletion since if you have subscribed to a device and subsequently created local
-                            // calculations and alarms associated with this device, these signals are locally owned and not part of the publisher subscription stream. As a result any
-                            // CALC or ALRM measurements that are created at source and then removed could be orphaned in subscriber. The best fix would be to have a simple flag that
-                            // clearly designates that a measurement was created locally and is not part of the remote synchronization set.
-                            if (signalTypeIDs.TryGetValue("CALC", out signalTypeID))
-                                excludedSignalTypeIDs.Add(signalTypeID);
-
-                            if (signalTypeIDs.TryGetValue("ALRM", out signalTypeID))
-                                excludedSignalTypeIDs.Add(signalTypeID);
-
-                            string exclusionExpression = "";
-
-                            if (excludedSignalTypeIDs.Count > 0)
-                                exclusionExpression = $" AND NOT SignalTypeID IN ({excludedSignalTypeIDs.ToDelimitedString(',')})";
-
-                            // Define SQL statement to remove device records that no longer exist in the meta-data
-                            string deleteMeasurementSql = database.ParameterizedQueryString($"DELETE FROM Measurement WHERE SignalID = {{0}}{exclusionExpression}", "signalID");
-
-                            // Determine which measurement rows should be synchronized based on operational mode flags
-                            if (ReceiveInternalMetadata && ReceiveExternalMetadata)
-                                measurementRows = measurementDetail.Select();
-                            else if (ReceiveInternalMetadata)
-                                measurementRows = measurementDetail.Select("Internal <> 0");
-                            else if (ReceiveExternalMetadata)
-                                measurementRows = measurementDetail.Select("Internal = 0");
-                            else
-                                measurementRows = new DataRow[0];
-
-                            // Check existence of optional meta-data fields
-                            DataColumnCollection measurementDetailColumns = measurementDetail.Columns;
-                            bool phasorSourceIndexFieldExists = measurementDetailColumns.Contains("PhasorSourceIndex");
-                            bool updatedOnFieldExists = measurementDetailColumns.Contains("UpdatedOn");
-
-                            object phasorSourceIndex = DBNull.Value;
-
-                            foreach (DataRow row in measurementRows)
-                            {
-                                bool recordNeedsUpdating;
-
-                                // Determine if record has changed since last synchronization
-                                if (updatedOnFieldExists)
-                                {
-                                    try
-                                    {
-                                        updateTime = Convert.ToDateTime(row["UpdatedOn"]);
-                                        recordNeedsUpdating = updateTime > m_lastMetaDataRefreshTime;
-
-                                        if (updateTime > latestUpdateTime)
-                                            latestUpdateTime = updateTime;
-                                    }
-                                    catch
-                                    {
-                                        recordNeedsUpdating = true;
-                                    }
-                                }
-                                else
-                                {
-                                    recordNeedsUpdating = true;
-                                }
-
-                                // Get device and signal type acronyms
-                                deviceAcronym = row.Field<string>("DeviceAcronym") ?? string.Empty;
-                                signalTypeAcronym = row.Field<string>("SignalAcronym") ?? string.Empty;
-
-                                // Get phasor source index if field is defined
-                                if (phasorSourceIndexFieldExists)
-                                {
-                                    // Using ConvertNullableField extension since publisher could use SQLite database in which case
-                                    // all integers would arrive in data set as longs and need to be converted back to integers
-                                    int? index = row.ConvertNullableField<int>("PhasorSourceIndex");
-                                    phasorSourceIndex = index.HasValue ? (object)index.Value : (object)DBNull.Value;
-                                }
-
-                                // Make sure we have an associated device and signal type already defined for the measurement
-                                if (!string.IsNullOrWhiteSpace(deviceAcronym) && deviceIDs.ContainsKey(deviceAcronym) && !string.IsNullOrWhiteSpace(signalTypeAcronym) && signalTypeIDs.ContainsKey(signalTypeAcronym))
-                                {
-                                    Guid signalID = Guid.Parse(row.Field<object>("SignalID").ToString());
-
-                                    // Track unique measurement signal Guids in this meta-data session, we'll need to remove any old associated measurements that no longer exist
-                                    signalIDs.Add(signalID);
-
-
-                                    // Prefix the tag name with the "updated" device name
-                                    string pointTag = sourcePrefix + row.Field<string>("PointTag");
-
-                                    // Look up associated device ID (local DB auto-inc)
-                                    deviceID = deviceIDs[deviceAcronym];
-
-                                    // Determine if measurement record already exists
-                                    if (Convert.ToInt32(command.ExecuteScalar(measurementExistsSql, m_metadataSynchronizationTimeout, database.Guid(signalID))) == 0)
-                                    {
-                                        string alternateTag = Guid.NewGuid().ToString();
-
-                                        // Insert new measurement record
-                                        command.ExecuteNonQuery(insertMeasurementSql, m_metadataSynchronizationTimeout, deviceID, historianID, pointTag, alternateTag, signalTypeIDs[signalTypeAcronym], phasorSourceIndex, sourcePrefix + row.Field<string>("SignalReference"), row.Field<string>("Description") ?? string.Empty, database.Bool(m_internal));
-
-                                        // Guids are normally auto-generated during insert - after insertion update the Guid so that it matches the source data. Most of the database
-                                        // scripts have triggers that support properly assigning the Guid during an insert, but this code ensures the Guid will always get assigned.
-                                        command.ExecuteNonQuery(updateMeasurementSignalIDSql, m_metadataSynchronizationTimeout, database.Guid(signalID), alternateTag);
-                                    }
-                                    else if (recordNeedsUpdating)
-                                    {
-                                        // Update existing measurement record. Note that this update assumes that measurements will remain associated with a static source device.
-                                        command.ExecuteNonQuery(updateMeasurementSql, m_metadataSynchronizationTimeout, historianID, pointTag, signalTypeIDs[signalTypeAcronym], phasorSourceIndex, sourcePrefix + row.Field<string>("SignalReference"), row.Field<string>("Description") ?? string.Empty, database.Bool(m_internal), database.Guid(signalID));
-                                    }
-                                }
-
-                                // Periodically notify user about synchronization progress
-                                UpdateSyncProgress();
-                            }
-
-                            // Remove any measurement records associated with existing devices in this session but no longer exist in the meta-data
-                            if (signalIDs.Count > 0)
-                            {
-                                // Sort signal ID list so that binary search can be used for quick lookups
-                                signalIDs.Sort();
-
-                                // Query all the guid-based signal ID's for all measurement records associated with the parent device using run-time ID
-                                DataTable measurementSignalIDs = command.RetrieveData(database.AdapterType, queryMeasurementSignalIDsSql, m_metadataSynchronizationTimeout, (int)ID);
-                                Guid signalID;
-
-                                // Walk through each database record and see if the measurement exists in the provided meta-data
-                                foreach (DataRow measurementRow in measurementSignalIDs.Rows)
-                                {
-                                    signalID = database.Guid(measurementRow, "SignalID");
-
-                                    // Remove any measurements in the database that are associated with received devices and do not exist in the meta-data
-                                    if (signalIDs.BinarySearch(signalID) < 0)
-                                    {
-                                        // Measurement was not in the meta-data, get the measurement's actual record based ID for its associated device
-                                        object measurementDeviceID = command.ExecuteScalar(queryMeasurementDeviceIDSql, m_metadataSynchronizationTimeout, database.Guid(signalID));
-
-                                        // If the unknown measurement is directly associated with a device that exists in the meta-data it is assumed that this measurement
-                                        // was removed from the publishing system and no longer exists therefore we remove it from the local measurement cache. If the user
-                                        // needs custom local measurements associated with a remote device, they should be associated with the parent device only.
-                                        if (measurementDeviceID != null && !(measurementDeviceID is DBNull) && deviceIDs.ContainsValue(Convert.ToInt32(measurementDeviceID)))
-                                            command.ExecuteNonQuery(deleteMeasurementSql, m_metadataSynchronizationTimeout, database.Guid(signalID));
-                                    }
-                                }
-
-                                UpdateSyncProgress();
-                            }
-                        }
-
-                        // Check to see if data for the "PhasorDetail" table was included in the meta-data
-                        if (metadata.Tables.Contains("PhasorDetail"))
-                        {
-                            DataTable phasorDetail = metadata.Tables["PhasorDetail"];
-                            Dictionary<int, List<int>> definedSourceIndicies = new Dictionary<int, List<int>>();
-                            Dictionary<int, int> metadataToDatabaseIDMap = new Dictionary<int, int>();
-                            Dictionary<int, int> sourceToDestinationIDMap = new Dictionary<int, int>();
-
-                            // Phasor data is normally only needed so that the user can properly generate a mirrored IEEE C37.118 output stream from the source data.
-                            // This is necessary since, in this protocol, the phasors are described (i.e., labeled) as a unit (i.e., as a complex number) instead of
-                            // as two distinct angle and magnitude measurements.
-
-                            // Define SQL statement to query if phasor record is already defined (no Guid is defined for these simple label records)
-                            string phasorExistsSql = database.ParameterizedQueryString("SELECT COUNT(*) FROM Phasor WHERE DeviceID = {0} AND SourceIndex = {1}", "deviceID", "sourceIndex");
-
-                            // Define SQL statement to insert new phasor record
-                            string insertPhasorSql = database.ParameterizedQueryString("INSERT INTO Phasor(DeviceID, Label, Type, Phase, SourceIndex) VALUES ({0}, {1}, {2}, {3}, {4})", "deviceID", "label", "type", "phase", "sourceIndex");
-
-                            // Define SQL statement to update existing phasor record
-                            string updatePhasorSql = database.ParameterizedQueryString("UPDATE Phasor SET Label = {0}, Type = {1}, Phase = {2} WHERE DeviceID = {3} AND SourceIndex = {4}", "label", "type", "phase", "deviceID", "sourceIndex");
-
-                            // Define SQL statement to delete a phasor record
-                            string deletePhasorSql = database.ParameterizedQueryString("DELETE FROM Phasor WHERE DeviceID = {0}", "deviceID");
-
-                            // Define SQL statement to query phasor record ID
-                            string queryPhasorIDSql = database.ParameterizedQueryString("SELECT ID FROM Phasor WHERE DeviceID = {0} AND SourceIndex = {1}", "deviceID", "sourceIndex");
-
-                            // Define SQL statement to update destinationPhasorID field of existing phasor record
-                            string updateDestinationPhasorIDSql = database.ParameterizedQueryString("UPDATE Phasor SET DestinationPhasorID = {0} WHERE ID = {1}", "destinationPhasorID", "id");
-
-                            // Check existence of optional meta-data fields
-                            DataColumnCollection phasorDetailColumns = phasorDetail.Columns;
-                            bool phasorIDFieldExists = phasorDetailColumns.Contains("ID");
-                            bool destinationPhasorIDFieldExists = phasorDetailColumns.Contains("DestinationPhasorID");
-
-                            foreach (DataRow row in phasorDetail.Rows)
-                            {
-                                // Get device acronym
-                                deviceAcronym = row.Field<string>("DeviceAcronym") ?? string.Empty;
-
-                                // Make sure we have an associated device already defined for the phasor record
-                                if (!string.IsNullOrWhiteSpace(deviceAcronym) && deviceIDs.ContainsKey(deviceAcronym))
-                                {
-                                    bool recordNeedsUpdating;
-
-                                    // Determine if record has changed since last synchronization
-                                    try
-                                    {
-                                        updateTime = Convert.ToDateTime(row["UpdatedOn"]);
-                                        recordNeedsUpdating = updateTime > m_lastMetaDataRefreshTime;
-
-                                        if (updateTime > latestUpdateTime)
-                                            latestUpdateTime = updateTime;
-                                    }
-                                    catch
-                                    {
-                                        recordNeedsUpdating = true;
-                                    }
-
-                                    deviceID = deviceIDs[deviceAcronym];
-
-                                    int sourceIndex = row.ConvertField<int>("SourceIndex");
-
-                                    // Determine if phasor record already exists
-                                    if (Convert.ToInt32(command.ExecuteScalar(phasorExistsSql, m_metadataSynchronizationTimeout, deviceID, sourceIndex)) == 0)
-                                    {
-                                        // Insert new phasor record
-                                        command.ExecuteNonQuery(insertPhasorSql, m_metadataSynchronizationTimeout, deviceID, row.Field<string>("Label") ?? "undefined", (row.Field<string>("Type") ?? "V").TruncateLeft(1), (row.Field<string>("Phase") ?? "+").TruncateLeft(1), sourceIndex);
-                                    }
-                                    else if (recordNeedsUpdating)
-                                    {
-                                        // Update existing phasor record
-                                        command.ExecuteNonQuery(updatePhasorSql, m_metadataSynchronizationTimeout, row.Field<string>("Label") ?? "undefined", (row.Field<string>("Type") ?? "V").TruncateLeft(1), (row.Field<string>("Phase") ?? "+").TruncateLeft(1), deviceID, sourceIndex);
-                                    }
-
-                                    if (phasorIDFieldExists && destinationPhasorIDFieldExists)
-                                    {
-                                        int sourcePhasorID = row.ConvertField<int>("ID");
-
-                                        // Using ConvertNullableField extension since publisher could use SQLite database in which case
-                                        // all integers would arrive in data set as longs and need to be converted back to integers
-                                        int? destinationPhasorID = row.ConvertNullableField<int>("DestinationPhasorID");
-
-                                        if (destinationPhasorID.HasValue)
-                                            sourceToDestinationIDMap[sourcePhasorID] = destinationPhasorID.Value;
-
-                                        // Map all metadata phasor IDs to associated local database phasor IDs
-                                        metadataToDatabaseIDMap[sourcePhasorID] = Convert.ToInt32(command.ExecuteScalar(queryPhasorIDSql, m_metadataSynchronizationTimeout, deviceID, sourceIndex));
-                                    }
-
-                                    // Track defined phasors for each device
-                                    definedSourceIndicies.GetOrAdd(deviceID, id => new List<int>()).Add(sourceIndex);
-                                }
-
-                                // Periodically notify user about synchronization progress
-                                UpdateSyncProgress();
-                            }
-
-                            // Once all phasor records have been processed, handle updating of destination phasor IDs
-                            foreach (KeyValuePair<int, int> item in sourceToDestinationIDMap)
-                            {
-                                int sourcePhasorID, destinationPhasorID;
-
-                                if (metadataToDatabaseIDMap.TryGetValue(item.Key, out sourcePhasorID) && metadataToDatabaseIDMap.TryGetValue(item.Value, out destinationPhasorID))
-                                    command.ExecuteNonQuery(updateDestinationPhasorIDSql, m_metadataSynchronizationTimeout, destinationPhasorID, sourcePhasorID);
-                            }
-
-                            // Remove any phasor records associated with existing devices in this session but no longer exist in the meta-data
-                            foreach (int id in deviceIDs.Values)
-                            {
-                                List<int> sourceIndicies;
-
-                                if (definedSourceIndicies.TryGetValue(id, out sourceIndicies))
-                                    command.ExecuteNonQuery(deletePhasorSql + $" AND SourceIndex NOT IN ({string.Join(",", sourceIndicies)})", m_metadataSynchronizationTimeout, id);
-                                else
-                                    command.ExecuteNonQuery(deletePhasorSql, m_metadataSynchronizationTimeout, id);
-                            }
-                        }
-
-                        if ((object)transaction != null)
-                            transaction.Commit();
-
-                        // Update local in-memory synchronized meta-data cache
-                        m_synchronizedMetadata = metadata;
-                    }
-                    catch (Exception ex)
-                    {
-                        OnProcessException(MessageLevel.Error, new InvalidOperationException("Failed to synchronize meta-data to local cache: " + ex.Message, ex));
-
-                        if ((object)transaction != null)
-                        {
-                            try
-                            {
-                                transaction.Rollback();
-                            }
-                            catch (Exception rollbackException)
-                            {
-                                OnProcessException(MessageLevel.Error, new InvalidOperationException("Failed to roll back database transaction due to exception: " + rollbackException.Message, rollbackException));
-                            }
-                        }
-
-                        return;
-                    }
-                    finally
-                    {
-                        if ((object)transaction != null)
-                            transaction.Dispose();
-                    }
-                }
+                // TODO: Handle synchronization - callback / virtual method
 
                 // New signals may have been defined, take original remote signal index cache and apply changes
                 if (m_remoteSignalIndexCache != null)
@@ -3450,26 +2617,6 @@ namespace sttp.transport
             return deserializedMetadata;
         }
 
-        private UnsynchronizedSubscriptionInfo FromLocallySynchronizedInfo(SynchronizedSubscriptionInfo info)
-        {
-            return new UnsynchronizedSubscriptionInfo(false)
-            {
-                FilterExpression = info.FilterExpression,
-                UseCompactMeasurementFormat = info.UseCompactMeasurementFormat,
-                UdpDataChannel = info.UdpDataChannel,
-                DataChannelLocalPort = info.DataChannelLocalPort,
-                LagTime = info.LagTime,
-                LeadTime = info.LeadTime,
-                UseLocalClockAsRealTime = false,
-                UseMillisecondResolution = info.UseMillisecondResolution,
-                StartTime = info.StartTime,
-                StopTime = info.StopTime,
-                ConstraintParameters = info.ConstraintParameters,
-                ProcessingInterval = info.ProcessingInterval,
-                ExtraConnectionStringParameters = info.ExtraConnectionStringParameters
-            };
-        }
-
         private Encoding GetCharacterEncoding(OperationalEncoding operationalEncoding)
         {
             Encoding encoding;
@@ -3517,26 +2664,6 @@ namespace sttp.transport
         // Disconnect client, restarting if disconnect was not intentional
         private void DisconnectClient()
         {
-            // Mark end of any data transmission in run-time log
-            if ((object)m_runTimeLog != null && m_runTimeLog.Enabled)
-            {
-                m_runTimeLog.StopTime = DateTimeOffset.UtcNow;
-                m_runTimeLog.Enabled = false;
-            }
-
-            //// Stop data gap recovery operations
-            //if (m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null)
-            //{
-            //    try
-            //    {
-            //        m_dataGapRecoverer.Enabled = false;
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Exception while attempting to flush data gap recoverer log: {ex.Message}", ex));
-            //    }
-            //}
-
             DataChannel = null;
             m_metadataRefreshPending = false;
 
@@ -3765,51 +2892,6 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Raises <see cref="AdapterBase.ProcessException"/> event.
-        /// </summary>
-        /// <param name="level">The <see cref="MessageLevel"/> to assign to this message</param>
-        /// <param name="exception">Processing <see cref="Exception"/>.</param>
-        /// <param name="eventName">A fixed string to classify this event; defaults to <c>null</c>.</param>
-        /// <param name="flags"><see cref="MessageFlags"/> to use, if any; defaults to <see cref="MessageFlags.None"/>.</param>
-        protected override void OnProcessException(MessageLevel level, Exception exception, string eventName = null, MessageFlags flags = MessageFlags.None)
-        {
-            base.OnProcessException(level, exception, eventName, flags);
-
-            // Just in case Log Message Suppression was turned on, turn it off so this code can raise messages
-            using (Logger.OverrideSuppressLogMessages())
-            {
-                if (DateTime.UtcNow.Ticks - m_lastParsingExceptionTime > m_parsingExceptionWindow)
-                {
-                    // Exception window has passed since last exception, so we reset counters
-                    m_lastParsingExceptionTime = DateTime.UtcNow.Ticks;
-                    m_parsingExceptionCount = 0;
-                }
-
-                m_parsingExceptionCount++;
-
-                if (m_parsingExceptionCount > m_allowedParsingExceptions)
-                {
-                    try
-                    {
-                        // When the parsing exception threshold has been exceeded, connection is restarted
-                        Start();
-                    }
-                    catch (Exception ex)
-                    {
-                        base.OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Error while restarting subscriber connection due to excessive exceptions: {ex.Message}", ex), "DataSubscriber", MessageFlags.UsageIssue);
-                    }
-                    finally
-                    {
-                        // Notify consumer of parsing exception threshold deviation
-                        OnExceededParsingExceptionThreshold();
-                        m_lastParsingExceptionTime = 0;
-                        m_parsingExceptionCount = 0;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// Raises the <see cref="ExceededParsingExceptionThreshold"/> event.
         /// </summary>
         private void OnExceededParsingExceptionThreshold()
@@ -3849,30 +2931,6 @@ namespace sttp.transport
             m_measurementsPerSecondCount = 0L;
         }
 
-        private void UpdateStatisticsHelpers()
-        {
-            long now = RealTime;
-            List<DeviceStatisticsHelper<SubscribedDevice>> statisticsHelpers = m_statisticsHelpers;
-
-            foreach (DeviceStatisticsHelper<SubscribedDevice> statisticsHelper in statisticsHelpers)
-            {
-                statisticsHelper.Update(now);
-
-                // TODO: Missing data detection could be complex. For example, no need to continue logging data outages for devices that are offline - but how to detect?
-                //// If data channel is UDP, measurements are missing for time span and data gap recovery enabled, request missing
-                //if ((object)m_dataChannel != null && m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null && m_lastMeasurementCheck > 0 &&
-                //    statisticsHelper.Device.MeasurementsExpected - statisticsHelper.Device.MeasurementsReceived > m_minimumMissingMeasurementThreshold)
-                //    m_dataGapRecoverer.LogDataGap(m_lastMeasurementCheck - Ticks.FromSeconds(m_transmissionDelayTimeAdjustment), now);
-            }
-
-            //m_lastMeasurementCheck = now;
-        }
-
-        private void SubscribedDevicesTimer_Elapsed(object sender, EventArgs<DateTime> elapsedEventArgs)
-        {
-            UpdateStatisticsHelpers();
-        }
-
         private bool SynchronizedMetadataChanged(DataSet newSynchronizedMetadata)
         {
             try
@@ -3898,13 +2956,66 @@ namespace sttp.transport
             return Path.Combine(m_loggingPath, filePath);
         }
 
+        protected internal virtual void OnStatusMessage(MessageLevel level, string status, string eventName = null)
+        {
+            // TODO: Raise event
+            //base.OnStatusMessage(level, status, eventName, flags);
+        }
+
+        protected internal virtual void OnProcessException(MessageLevel level, Exception exception, string eventName = null)
+        {
+            // TODO: Raise event
+            //base.OnProcessException(level, exception, eventName, flags);
+
+            if (DateTime.UtcNow.Ticks - m_lastParsingExceptionTime > m_parsingExceptionWindow)
+            {
+                // Exception window has passed since last exception, so we reset counters
+                m_lastParsingExceptionTime = DateTime.UtcNow.Ticks;
+                m_parsingExceptionCount = 0;
+            }
+
+            m_parsingExceptionCount++;
+
+            if (m_parsingExceptionCount > m_allowedParsingExceptions)
+            {
+                try
+                {
+                    // When the parsing exception threshold has been exceeded, connection is restarted
+                    Start();
+                }
+                catch (Exception ex)
+                {
+                    base.OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Error while restarting subscriber connection due to excessive exceptions: {ex.Message}", ex), "DataSubscriber", MessageFlags.UsageIssue);
+                }
+                finally
+                {
+                    // Notify consumer of parsing exception threshold deviation
+                    OnExceededParsingExceptionThreshold();
+                    m_lastParsingExceptionTime = 0;
+                    m_parsingExceptionCount = 0;
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Returns <c>true</c> if <see cref="DataSubscriber"/> has a temporal constraint defined, i.e., either
+        /// <see cref="StartTimeConstraint"/> or <see cref="StopTimeConstraint"/> is not
+        /// set to its default value.
+        /// </summary>
+        /// <returns><c>true</c> if <see cref="DataSubscriber"/> has a temporal constraint defined.</returns>
+        public bool TemporalConstraintIsDefined()
+        {
+            return StartTimeConstraint != DateTime.MinValue || StopTimeConstraint != DateTime.MaxValue;
+        }
+
         private void m_localConcentrator_ProcessException(object sender, EventArgs<Exception> e)
         {
             // Make sure any exceptions reported by local concentrator get exposed as needed
             OnProcessException(MessageLevel.Warning, e.Argument);
         }
 
-        private void m_dataStreamMonitor_Elapsed(object sender, EventArgs<DateTime> e)
+        private void m_dataStreamMonitor_Elapsed(object sender, ElapsedEventArgs e)
         {
             bool dataReceived = m_monitoredBytesReceived > 0;
 
@@ -3921,26 +3032,6 @@ namespace sttp.transport
 
             // Reset bytes received bytes being monitored
             m_monitoredBytesReceived = 0L;
-        }
-
-        private void m_runTimeLog_ProcessException(object sender, EventArgs<Exception> e)
-        {
-            OnProcessException(MessageLevel.Info, e.Argument);
-        }
-
-        private void m_dataGapRecoverer_RecoveredMeasurements(object sender, EventArgs<ICollection<IMeasurement>> e)
-        {
-            OnNewMeasurements(e.Argument);
-        }
-
-        private void m_dataGapRecoverer_StatusMessage(object sender, EventArgs<string> e)
-        {
-            OnStatusMessage(MessageLevel.Info, "[DataGapRecoverer] " + e.Argument);
-        }
-
-        private void m_dataGapRecoverer_ProcessException(object sender, EventArgs<Exception> e)
-        {
-            OnProcessException(MessageLevel.Warning, new InvalidOperationException("[DataGapRecoverer] " + e.Argument.Message, e.Argument.InnerException));
         }
 
         private void ReceiveChannelData(ref byte[] buffer, ref int bufferLength, IClient channelClient, int bytesReceived)
@@ -3997,9 +3088,6 @@ namespace sttp.transport
 
             if (m_autoConnect && Enabled)
                 StartSubscription();
-
-            //if (m_dataGapRecoveryEnabled && (object)m_dataGapRecoverer != null)
-            //    m_dataGapRecoverer.Enabled = true;
         }
 
         private void m_commandChannel_ConnectionTerminated(object sender, EventArgs e)

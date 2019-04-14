@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  TlsClient.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,10 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  07/12/2012 - Stephen C. Wills
-//       Generated original version of source code.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//       Modified Header.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -37,11 +35,10 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using System.Threading;
-using GSF.Configuration;
-using GSF.IO;
 using sttp.security;
-using GSF.Threading;
+using sttp.threading;
 
+// ReSharper disable AccessToDisposedClosure
 namespace sttp.communication
 {
     /// <summary>
@@ -116,13 +113,11 @@ namespace sttp.communication
 
             public void Dispose()
             {
-                TlsClientPayload payload;
-
                 Dispose(Socket);
                 Dispose(NetworkStream);
                 Dispose(SslStream);
 
-                while (SendQueue.TryDequeue(out payload))
+                while (SendQueue.TryDequeue(out TlsClientPayload payload))
                 {
                     payload.WaitHandle.Set();
                     payload.WaitHandle.Dispose();
@@ -497,26 +492,8 @@ namespace sttp.communication
                 {
                     try
                     {
-                        string applicationName;
-
                         // Get application name
-                        try
-                        {
-                            // Attempt to retrieve application name as defined in common security settings - this name
-                            // is typically preconfigured as the desired event source for event log entries
-                            ConfigurationFile config = ConfigurationFile.Current;
-                            CategorizedSettingsElementCollection settings = config.Settings["SecurityProvider"];
-                            applicationName = settings["ApplicationName"].Value;
-                        }
-                        catch
-                        {
-                            applicationName = null;
-                        }
-
-                        // Fall back on running executable name
-                        if (string.IsNullOrWhiteSpace(applicationName))
-                            applicationName = FilePath.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName);
-
+                        string applicationName = FilePath.GetFileNameWithoutExtension(AppDomain.CurrentDomain.FriendlyName);
                         string message = $"One or more less secure TLS/SSL protocols \"{m_enabledSslProtocols}\" are being used by an instance of the TlsClient in {applicationName}";
                         EventLog.WriteEntry(applicationName, message, EventLogEntryType.Warning, 1);
                     }
@@ -615,84 +592,6 @@ namespace sttp.communication
         #region [ Methods ]
 
         /// <summary>
-        /// Saves <see cref="TlsClient"/> settings to the config file if the <see cref="ClientBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void SaveSettings()
-        {
-            base.SaveSettings();
-
-            if (PersistSettings)
-            {
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings["EnabledSslProtocols", true].Update(m_enabledSslProtocols);
-                settings["CheckCertificateRevocation", true].Update(m_checkCertificateRevocation);
-                settings["CertificateFile", true].Update(m_certificateFile);
-                settings["TrustedCertificatesPath", true].Update(m_trustedCertificatesPath);
-                settings["ValidPolicyErrors", true].Update(ValidPolicyErrors);
-                settings["ValidChainFlags", true].Update(ValidChainFlags);
-                settings["PayloadAware", true].Update(m_payloadAware);
-                settings["IntegratedSecurity", true].Update(m_integratedSecurity);
-                settings["AllowDualStackSocket", true].Update(m_allowDualStackSocket);
-                settings["MaxSendQueueSize", true].Update(m_maxSendQueueSize);
-                settings["NoDelay", true].Update(m_noDelay);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved <see cref="TlsClient"/> settings from the config file if the <see cref="ClientBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void LoadSettings()
-        {
-            base.LoadSettings();
-
-            if (PersistSettings)
-            {
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings.Add("EnabledSslProtocols", m_enabledSslProtocols, "The set of SSL protocols that are enabled for this client.");
-                settings.Add("CheckCertificateRevocation", m_checkCertificateRevocation, "True if the certificate revocation list is to be checked during authentication, otherwise False.");
-                settings.Add("CertificateFile", m_certificateFile, "Path to the certificate used by this client for authentication.");
-                settings.Add("TrustedCertificatesPath", m_trustedCertificatesPath, "Path to the directory containing the trusted remote certificates.");
-                settings.Add("ValidPolicyErrors", ValidPolicyErrors, "Set of valid policy errors when validating remote certificates.");
-                settings.Add("ValidChainFlags", ValidChainFlags, "Set of valid chain flags used when validating remote certificates.");
-                settings.Add("PayloadAware", m_payloadAware, "True if payload boundaries are to be preserved during transmission, otherwise False.");
-                settings.Add("IntegratedSecurity", m_integratedSecurity, "True if the current Windows account credentials are used for authentication, otherwise False.");
-                settings.Add("AllowDualStackSocket", m_allowDualStackSocket, "True if dual-mode socket is allowed when IP address is IPv6, otherwise False.");
-                settings.Add("MaxSendQueueSize", m_maxSendQueueSize, "The maximum size of the send queue before payloads are dumped from the queue.");
-                settings.Add("NoDelay", m_noDelay, "True to disable Nagle so that small packets are delivered to the remote host without delay, otherwise False.");
-
-                try
-                {
-                    // Attempt to set desired transport security protocols
-                    EnabledSslProtocols = settings["EnabledSslProtocols"].ValueAs(m_enabledSslProtocols);
-                }
-                catch (SecurityException ex)
-                {
-                    // Security exception can occur when user forces use of older TLS protocol through configuration but event log warning entry cannot be written
-                    OnConnectionException(new SecurityException($"Transport layer security protocols assigned as configured: \"{EnabledSslProtocols}\", however, event log entry for security exception could not be written: {ex.Message}", ex));
-                }
-
-                CheckCertificateRevocation = settings["CheckCertificateRevocation"].ValueAs(m_checkCertificateRevocation);
-                CertificateFile = settings["CertificateFile"].ValueAs(m_certificateFile);
-                TrustedCertificatesPath = settings["TrustedCertificatesPath"].ValueAs(m_trustedCertificatesPath);
-                ValidPolicyErrors = settings["ValidPolicyErrors"].ValueAs(ValidPolicyErrors);
-                ValidChainFlags = settings["ValidChainFlags"].ValueAs(ValidChainFlags);
-                PayloadAware = settings["PayloadAware"].ValueAs(m_payloadAware);
-                IntegratedSecurity = settings["IntegratedSecurity"].ValueAs(m_integratedSecurity);
-                AllowDualStackSocket = settings["AllowDualStackSocket"].ValueAs(m_allowDualStackSocket);
-                MaxSendQueueSize = settings["MaxSendQueueSize"].ValueAs(m_maxSendQueueSize);
-                NoDelay = settings["NoDelay"].ValueAs(m_noDelay);
-            }
-
-            if (!FilePath.InApplicationPath(TrustedCertificatesPath))
-                OnConnectionException(new SecurityException($"Trusted certificates path \"{TrustedCertificatesPath}\" is not in application path"));
-        }
-
-        /// <summary>
         /// Connects the <see cref="TlsClient"/> to the server asynchronously.
         /// </summary>
         /// <exception cref="InvalidOperationException">Attempt is made to connect the <see cref="TlsClient"/> when it is not disconnected.</exception>
@@ -767,7 +666,7 @@ namespace sttp.communication
                 }
                 finally
                 {
-                    // If the operation was cancelled during execution,
+                    // If the operation was canceled during execution,
                     // make sure to dispose of erroneously allocated resources
                     if ((object)connectState != null && connectState.Token.Cancelled)
                         connectState.Dispose();
@@ -797,7 +696,7 @@ namespace sttp.communication
 
             try
             {
-                // Quit if this connection loop has been cancelled
+                // Quit if this connection loop has been canceled
                 if (connectState.Token.Cancelled)
                     return;
 
@@ -881,7 +780,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of erroneously allocated resources
                 if (connectState.Token.Cancelled)
                     connectState.Dispose();
@@ -906,7 +805,7 @@ namespace sttp.communication
                 if (!connectState.TimeoutToken.Cancel())
                     return;
 
-                // Quit if this connection loop has been cancelled
+                // Quit if this connection loop has been canceled
                 if (connectState.Token.Cancelled)
                     return;
 
@@ -1042,7 +941,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of erroneously allocated resources
                 if ((object)connectState != null && connectState.Token.Cancelled)
                     connectState.Dispose();
@@ -1071,7 +970,7 @@ namespace sttp.communication
                 if (!connectState.TimeoutToken.Cancel())
                     return;
 
-                // Quit if this connection loop has been cancelled
+                // Quit if this connection loop has been canceled
                 if (connectState.Token.Cancelled)
                     return;
 
@@ -1175,7 +1074,7 @@ namespace sttp.communication
             {
                 if ((object)connectState != null)
                 {
-                    // If the operation was cancelled during execution,
+                    // If the operation was canceled during execution,
                     // make sure to dispose of erroneously allocated resources;
                     // otherwise, dispose of the NegotiateStream which is only used for authentication
                     if (connectState.Token.Cancelled)
@@ -1228,7 +1127,7 @@ namespace sttp.communication
                 // Get the receive state from the async result
                 receiveState = (ReceiveState)asyncResult.AsyncState;
 
-                // Quit if this receive loop has been cancelled
+                // Quit if this receive loop has been canceled
                 if (receiveState.Token.Cancelled)
                     return;
 
@@ -1303,7 +1202,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)receiveState != null && receiveState.Token.Cancelled)
                     receiveState.Dispose();
@@ -1338,7 +1237,7 @@ namespace sttp.communication
                 // Get the receive state from the async result
                 receiveState = (ReceiveState)asyncResult.AsyncState;
 
-                // Quit if this receive loop has been cancelled
+                // Quit if this receive loop has been canceled
                 if (receiveState.Token.Cancelled)
                     return;
 
@@ -1391,7 +1290,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)receiveState != null && receiveState.Token.Cancelled)
                     receiveState.Dispose();
@@ -1455,7 +1354,7 @@ namespace sttp.communication
                 // Get the current send state
                 sendState = m_sendState;
 
-                // Quit if the send loop has been cancelled
+                // Quit if the send loop has been canceled
                 if (sendState.Token.Cancelled)
                     return null;
 
@@ -1499,7 +1398,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)sendState != null && sendState.Token.Cancelled)
                     sendState.Dispose();
@@ -1513,19 +1412,17 @@ namespace sttp.communication
         /// </summary>
         private void SendPayloadAsync(SendState sendState)
         {
-            TlsClientPayload payload;
-
             byte[] data;
             int offset;
             int length;
 
             try
             {
-                // Quit if this send loop has been cancelled
+                // Quit if this send loop has been canceled
                 if (sendState.Token.Cancelled)
                     return;
 
-                if (sendState.SendQueue.TryDequeue(out payload))
+                if (sendState.SendQueue.TryDequeue(out TlsClientPayload payload))
                 {
                     // Save the payload currently
                     // being sent to the send state
@@ -1558,7 +1455,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if (sendState.Token.Cancelled)
                     sendState.Dispose();
@@ -1583,7 +1480,7 @@ namespace sttp.communication
                 payload = sendState.Payload;
                 handle = payload.WaitHandle;
 
-                // Quit if this send loop has been cancelled
+                // Quit if this send loop has been canceled
                 if (sendState.Token.Cancelled)
                     return;
 
@@ -1632,7 +1529,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)sendState != null && sendState.Token.Cancelled)
                     sendState.Dispose();
@@ -1813,9 +1710,8 @@ namespace sttp.communication
         private void DumpPayloads()
         {
             SendState sendState = m_sendState;
-            TlsClientPayload payload;
 
-            // Quit if this send loop has been cancelled
+            // Quit if this send loop has been canceled
             if ((object)sendState == null || sendState.Token.Cancelled)
                 return;
 
@@ -1827,7 +1723,7 @@ namespace sttp.communication
                     if (sendState.Token.Cancelled)
                         return;
 
-                    if (sendState.SendQueue.TryDequeue(out payload))
+                    if (sendState.SendQueue.TryDequeue(out TlsClientPayload payload))
                     {
                         payload.WaitHandle.Set();
                         payload.WaitHandle.Dispose();

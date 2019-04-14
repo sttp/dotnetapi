@@ -1,5 +1,5 @@
 ﻿//******************************************************************************************************
-//  ICertificateChecker.cs - Gbtc
+//  IProvideStatus.cs - Gbtc
 //
 //  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
@@ -21,33 +21,22 @@
 //
 //******************************************************************************************************
 
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
-
-namespace sttp.security
+namespace sttp
 {
     /// <summary>
-    /// Defines the interface for a generic X.509 certificate checker.
+    /// Defines an interface for any object to allow it to provide a name and status
+    /// that can be displayed for informational purposes.
     /// </summary>
-    public interface ICertificateChecker
+    public interface IProvideStatus
     {
         /// <summary>
-        /// Gets the reason why the remote certificate validation
-        /// failed, or null if certificate validation did not fail.
+        /// Gets the name of the object providing status information.
         /// </summary>
-        string ReasonForFailure
-        {
-            get;
-        }
+        string Name { get; }
 
         /// <summary>
-        /// Verifies the remote certificate used for authentication.
+        /// Gets the current status details about object providing status information.
         /// </summary>
-        /// <param name="sender">An object that contains state information for this validation.</param>
-        /// <param name="remoteCertificate">The certificate used to authenticate the remote party.</param>
-        /// <param name="chain">The chain of certificate authorities associated with the remote certificate.</param>
-        /// <param name="errors">One or more errors associated with the remote certificate.</param>
-        /// <returns>A flag that determines whether the specified certificate is accepted for authentication.</returns>
-        bool ValidateRemoteCertificate(object sender, X509Certificate remoteCertificate, X509Chain chain, SslPolicyErrors errors);
+        string Status { get; }
     }
-}
+ }

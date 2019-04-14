@@ -36,7 +36,7 @@ namespace sttp
         /// <param name="guid">The <see cref="Guid"/> to serialize.</param>
         /// <param name="buffer">Destination buffer to hold serialized <paramref name="guid"/>.</param>
         /// <param name="startingIndex">Starting index in <paramref name="buffer"/>.</param>
-        public static int ToRfcBytes(this Guid guid, byte[] buffer, int startingIndex)
+        public static int ToRFCBytes(this Guid guid, byte[] buffer, int startingIndex)
         {
             // Since Microsoft is not very clear how Guid.ToByteArray() performs on big endian processors
             // we are assuming that the internal structure of a Guid will always be the same. Reviewing
@@ -82,9 +82,10 @@ namespace sttp
         /// </summary>
         /// <param name="guid">The <see cref="Guid"/> to serialize.</param>
         /// <param name="buffer">Destination buffer to hold serialized <paramref name="guid"/>.</param>
-        public static int ToRfcBytes(this Guid guid, byte* buffer)
+        public static int ToRFCBytes(this Guid guid, byte* buffer)
         {
             byte* src = (byte*)&guid;
+
             if (BitConverter.IsLittleEndian)
             {
                 // Guid._a (int)
@@ -119,10 +120,10 @@ namespace sttp
         /// </summary>
         /// <param name="guid"><see cref="Guid"/> to serialize.</param>
         /// <returns>A <see cref="byte"/> array that represents a big-endian encoded <see cref="Guid"/>.</returns>
-        public static byte[] ToRfcBytes(this Guid guid)
+        public static byte[] ToRFCBytes(this Guid guid)
         {
             byte[] rv = new byte[16];
-            guid.ToRfcBytes(rv, 0);
+            guid.ToRFCBytes(rv, 0);
             return rv;
         }
 
@@ -131,9 +132,9 @@ namespace sttp
         /// </summary>
         /// <param name="buffer">Buffer containing a serialized big-endian encoded <see cref="Guid"/>.</param>
         /// <returns><see cref="Guid"/> deserialized from <paramref name="buffer"/>.</returns>
-        public static Guid ToRfcGuid(this byte[] buffer)
+        public static Guid FromRFCGuid(this byte[] buffer)
         {
-            return buffer.ToRfcGuid(0);
+            return buffer.FromRFCGuid(0);
         }
 
         /// <summary>
@@ -141,7 +142,7 @@ namespace sttp
         /// </summary>
         /// <param name="buffer">Buffer containing a serialized big-endian encoded <see cref="Guid"/>.</param>
         /// <returns><see cref="Guid"/> deserialized from <paramref name="buffer"/>.</returns>
-        public static Guid ToRfcGuid(byte* buffer)
+        public static Guid FromRFCGuid(byte* buffer)
         {
             // Since Microsoft is not very clear how Guid.ToByteArray() performs on big endian processors
             // we are assuming that the internal structure of a Guid will always be the same. Reviewing
@@ -185,7 +186,7 @@ namespace sttp
         /// <param name="buffer">Buffer containing a serialized big-endian encoded <see cref="Guid"/>.</param>
         /// <param name="startingIndex">Starting index in <paramref name="buffer"/>.</param>
         /// <returns><see cref="Guid"/> deserialized from <paramref name="buffer"/>.</returns>
-        public static Guid ToRfcGuid(this byte[] buffer, int startingIndex)
+        public static Guid FromRFCGuid(this byte[] buffer, int startingIndex)
         {
             buffer.ValidateParameters(startingIndex, 16);
 

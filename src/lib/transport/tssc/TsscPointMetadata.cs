@@ -21,10 +21,9 @@
 //
 //******************************************************************************************************
 
-
 using System;
 
-namespace sttp.tssc
+namespace sttp.transport.tssc
 {
     /// <summary>
     /// The metadata kept for each pointID.
@@ -40,7 +39,7 @@ namespace sttp.tssc
         public uint PrevValue3;
 
         private readonly byte[] m_commandStats;
-        private int m_commandsSentSinceLastChange = 0;
+        private int m_commandsSentSinceLastChange;
 
         //Bit codes for the 4 modes of encoding. 
         private byte m_mode;
@@ -55,7 +54,7 @@ namespace sttp.tssc
         private byte m_mode401;
         private byte m_mode4001;
 
-        private int m_startupMode = 0;
+        private int m_startupMode;
 
         private readonly Action<int, int> m_writeBits;
 
@@ -145,7 +144,7 @@ namespace sttp.tssc
 
         public int ReadCode()
         {
-            int code = 0;
+            int code;
 
             switch (m_mode)
             {

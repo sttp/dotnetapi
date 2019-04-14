@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  IServer.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,25 +16,15 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  07/26/2006 - Pinal C. Patel
-//       Original version of source code generated.
-//  09/06/2006 - J. Ritchie Carroll
-//       Added ReceiveRawDataFunction delegate to allow bypass optimizations for high-speed data access.
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  11/07/2008 - Pinal C. Patel
-//       Edited code comments.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//       Modified Header.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
 using System;
 using System.Text;
 using System.Threading;
-using GSF.Units;
+using sttp.units;
 
 namespace sttp.communication
 {

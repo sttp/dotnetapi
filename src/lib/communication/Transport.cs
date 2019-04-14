@@ -1,14 +1,14 @@
 //******************************************************************************************************
 //  Transport.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,29 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  06/01/2006 - Pinal C. Patel
-//       Original version of source created.
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  08/22/2009 - Pinal C. Patel
-//       Modified CreateEndPoint() to try parsing IP address first before doing a DNS lookup.
-//  09/08/2009 - Pinal C. Patel
-//       Modified CreateSocket() to create a socket for the AddressFamily of the endpoint.
-//       Modified CreateEndPoint() to use IPv6 if supported when no IP address is specified.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  10/30/2009 - Pinal C. Patel
-//       Added IsIPv6IP() and IsMulticastIP() methods.
-//       Fixed issue in CreateSocket() that was breaking one-way communication support in UDP components.
-//  04/29/2010 - Pinal C. Patel
-//       Added EndpointFormatRegex constant to be used for parsing endpoint strings.
-//  08/18/2011 - J. Ritchie Carroll
-//       Multiple additions and updates to accomodate easier IPv6 or IPv4 selection as well as
-//       dual-mode socket support.
-//  09/21/2011 - J. Ritchie Carroll
-//       Added Mono implementation exception regions.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//       Modified Header.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -141,11 +120,10 @@ namespace sttp.communication
                 return new IPEndPoint(IPAddress.Any, port);
             }
 
-            IPAddress address;
             bool ipStackMismatch = false;
 
             // Attempt to parse provided address name as a literal IP address
-            if (IPAddress.TryParse(hostNameOrAddress, out address))
+            if (IPAddress.TryParse(hostNameOrAddress, out IPAddress address))
             {
                 // As long as desired IP stack matches format of specified IP address, return end point for address
                 if ((stack == IPStack.IPv6 && address.AddressFamily == AddressFamily.InterNetworkV6) ||
@@ -161,7 +139,7 @@ namespace sttp.communication
             try
             {
                 // Handle "localhost" as a special case, returning proper loopback address for the desired IP stack
-                if (string.Compare(hostNameOrAddress, "localhost", true) == 0)
+                if (String.Compare(hostNameOrAddress, "localhost", StringComparison.OrdinalIgnoreCase) == 0)
                     return new IPEndPoint(stack == IPStack.IPv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback, port);
 
                 // Failed to parse an IP address for the desired stack - this may simply be that a host name was provided
@@ -285,6 +263,7 @@ namespace sttp.communication
                 if (hostEntry.AddressList.Length > 0)
                     return (hostEntry.AddressList[0].AddressFamily == AddressFamily.InterNetworkV6 && Socket.OSSupportsIPv6 ? IPStack.IPv6 : IPStack.IPv4);
             }
+            // ReSharper disable once EmptyGeneralCatchClause
             catch
             {
             }
@@ -306,9 +285,7 @@ namespace sttp.communication
         /// </remarks>
         public static IPStack GetInterfaceIPStack(Dictionary<string, string> connectionStringEntries)
         {
-            string ipAddress;
-
-            if (connectionStringEntries.TryGetValue("interface", out ipAddress))
+            if (connectionStringEntries.TryGetValue("interface", out string ipAddress))
                 return IsIPv6IP(ipAddress) ? IPStack.IPv6 : IPStack.IPv4;
 
             connectionStringEntries.Add("interface", string.Empty);
@@ -329,9 +306,7 @@ namespace sttp.communication
             if (string.IsNullOrWhiteSpace(ipAddress))
                 throw new ArgumentNullException(nameof(ipAddress));
 
-            IPAddress address;
-
-            if (IPAddress.TryParse(ipAddress, out address))
+            if (IPAddress.TryParse(ipAddress, out IPAddress address))
                 return address.AddressFamily == AddressFamily.InterNetworkV6;
 
             return false;
@@ -368,10 +343,8 @@ namespace sttp.communication
         /// <returns>True if the port number is valid.</returns>
         public static bool IsPortNumberValid(string port)
         {
-            int portNumber;
-
             // Check to see if the specified port is a valid integer value
-            if (int.TryParse(port, out portNumber))
+            if (int.TryParse(port, out int portNumber))
             {
                 // Check to see if the port number is within the valid range
                 if (portNumber >= PortRangeLow && portNumber <= PortRangeHigh)

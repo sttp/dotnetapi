@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  TcpClient.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,41 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  06/02/2006 - Pinal C. Patel
-//       Original version of source code generated.
-//  09/06/2006 - J. Ritchie Carroll
-//       Added bypass optimizations for high-speed socket access.
-//  12/01/2006 - Pinal C. Patel
-//       Modified code for handling "PayloadAware" transmissions.
-//  09/27/2007 - J. Ritchie Carroll
-//       Added disconnect timeout overload.
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  07/08/2009 - J. Ritchie Carroll
-//       Added WaitHandle return value from asynchronous connection.
-//  07/15/2009 - Pinal C. Patel
-//       Modified Disconnect() to add error checking.
-//  07/17/2009 - Pinal C. Patel
-//       Added support to specify a specific interface address on a multiple interface machine.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  03/24/2010 - Pinal C. Patel
-//       Updated the interpretation of server property in ConnectionString to correctly interpret 
-//       IPv6 IP addresses according to IETF - A Recommendation for IPv6 Address Text Representation.
-//  11/29/2010 - Pinal C. Patel
-//       Corrected the implementation of ConnectAsync() method.
-//  02/11/2011 - Pinal C. Patel
-//       Added IntegratedSecurity property to enable integrated windows authentication.
-//  02/13/2011 - Pinal C. Patel
-//       Modified ConnectAsync() to handle loopback address resolution failure on IPv6 enabled OSes.
-//  09/21/2011 - J. Ritchie Carroll
-//       Added Mono implementation exception regions.
-//  07/23/2012 - Stephen C. Wills
-//       Performed a full refactor to use the SocketAsyncEventArgs API calls.
-//  10/31/2012 - Stephen C. Wills
-//       Replaced single-threaded BlockingCollection pattern with asynchronous loop pattern.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//        Modified Header.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -67,10 +34,9 @@ using System.Threading;
 using System.Net.Security;
 using System.Security.Authentication;
 #endif
-using GSF.Configuration;
-using GSF.Diagnostics;
-using GSF.Threading;
+using sttp.threading;
 
+// ReSharper disable AccessToDisposedClosure
 namespace sttp.communication
 {
     /// <summary>
@@ -222,13 +188,11 @@ namespace sttp.communication
 
             public void Dispose()
             {
-                TcpClientPayload payload;
-
                 Dispose(Socket);
                 Dispose(ReceiveArgs);
                 Dispose(SendArgs);
 
-                while (SendQueue.TryDequeue(out payload))
+                while (SendQueue.TryDequeue(out TcpClientPayload payload))
                 {
                     payload.WaitHandle.Set();
                     payload.WaitHandle.Dispose();
@@ -534,56 +498,6 @@ namespace sttp.communication
         #region [ Methods ]
 
         /// <summary>
-        /// Saves <see cref="TcpClient"/> settings to the config file if the <see cref="ClientBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void SaveSettings()
-        {
-            base.SaveSettings();
-            if (PersistSettings)
-            {
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings["PayloadAware", true].Update(m_payloadAware);
-                settings["IntegratedSecurity", true].Update(m_integratedSecurity);
-                settings["AllowDualStackSocket", true].Update(m_allowDualStackSocket);
-                settings["MaxSendQueueSize", true].Update(m_maxSendQueueSize);
-                settings["NoDelay", true].Update(m_noDelay);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved <see cref="TcpClient"/> settings from the config file if the <see cref="ClientBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void LoadSettings()
-        {
-            int maxSendQueueSize;
-
-            base.LoadSettings();
-            if (PersistSettings)
-            {
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings.Add("PayloadAware", m_payloadAware, "True if payload boundaries are to be preserved during transmission, otherwise False.");
-                settings.Add("IntegratedSecurity", m_integratedSecurity, "True if the current Windows account credentials are used for authentication, otherwise False.");
-                settings.Add("AllowDualStackSocket", m_allowDualStackSocket, "True if dual-mode socket is allowed when IP address is IPv6, otherwise False.");
-                settings.Add("MaxSendQueueSize", m_maxSendQueueSize, "The maximum size of the send queue before payloads are dumped from the queue.");
-                settings.Add("NoDelay", m_noDelay, "True to disable Nagle so that small packets are delivered to the remote host without delay, otherwise False.");
-                PayloadAware = settings["PayloadAware"].ValueAs(m_payloadAware);
-                IntegratedSecurity = settings["IntegratedSecurity"].ValueAs(m_integratedSecurity);
-                AllowDualStackSocket = settings["AllowDualStackSocket"].ValueAs(m_allowDualStackSocket);
-                MaxSendQueueSize = settings["MaxSendQueueSize"].ValueAs(m_maxSendQueueSize);
-                NoDelay = settings["NoDelay"].ValueAs(m_noDelay);
-
-                // Overwrite config file if max send queue size exists in connection string.
-                if (m_connectData.ContainsKey("maxSendQueueSize") && int.TryParse(m_connectData["maxSendQueueSize"], out maxSendQueueSize))
-                    m_maxSendQueueSize = maxSendQueueSize;
-            }
-        }
-
-        /// <summary>
         /// Connects the <see cref="TcpClient"/> to the server asynchronously.
         /// </summary>
         /// <exception cref="InvalidOperationException">Attempt is made to connect the <see cref="TcpClient"/> when it is not disconnected.</exception>
@@ -658,7 +572,7 @@ namespace sttp.communication
                 }
                 finally
                 {
-                    // If the operation was cancelled during execution,
+                    // If the operation was canceled during execution,
                     // make sure to dispose of erroneously allocated resources
                     if ((object)connectState != null && connectState.Token.Cancelled)
                         connectState.Dispose();
@@ -692,7 +606,7 @@ namespace sttp.communication
 
             try
             {
-                // Quit if this connection loop has been cancelled
+                // Quit if this connection loop has been canceled
                 if (connectState.Token.Cancelled)
                     return;
 
@@ -842,7 +756,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of erroneously allocated resources
                 if ((object)connectState != null && connectState.Token.Cancelled)
                     connectState.Dispose();
@@ -871,7 +785,7 @@ namespace sttp.communication
                 if (!connectState.TimeoutToken.Cancel())
                     return;
 
-                // Quit if this connection loop has been cancelled
+                // Quit if this connection loop has been canceled
                 if (connectState.Token.Cancelled)
                     return;
 
@@ -995,7 +909,7 @@ namespace sttp.communication
             {
                 if ((object)connectState != null)
                 {
-                    // If the operation was cancelled during execution,
+                    // If the operation was canceled during execution,
                     // make sure to dispose of erroneously allocated resources;
                     // otherwise, dispose of the NegotiateStream which is only used for authentication
                     if (connectState.Token.Cancelled)
@@ -1049,7 +963,7 @@ namespace sttp.communication
         {
             try
             {
-                // Quit if this receive loop has been cancelled
+                // Quit if this receive loop has been canceled
                 if (receiveState.Token.Cancelled)
                     return;
 
@@ -1119,7 +1033,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)receiveState != null && receiveState.Token.Cancelled)
                     receiveState.Dispose();
@@ -1147,7 +1061,7 @@ namespace sttp.communication
         {
             try
             {
-                // Quit if this receive loop has been cancelled
+                // Quit if this receive loop has been canceled
                 if (receiveState.Token.Cancelled)
                     return;
 
@@ -1257,7 +1171,7 @@ namespace sttp.communication
                 // Get the current send state
                 sendState = m_sendState;
 
-                // Quit if this send loop has been cancelled
+                // Quit if this send loop has been canceled
                 if (sendState.Token.Cancelled)
                     return null;
 
@@ -1301,7 +1215,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)sendState != null && sendState.Token.Cancelled)
                     sendState.Dispose();
@@ -1315,15 +1229,13 @@ namespace sttp.communication
         /// </summary>
         private void SendPayloadAsync(SendState sendState)
         {
-            TcpClientPayload payload;
-
             try
             {
-                // Quit if this send loop has been cancelled
+                // Quit if this send loop has been canceled
                 if (sendState.Token.Cancelled)
                     return;
 
-                if (sendState.SendQueue.TryDequeue(out payload))
+                if (sendState.SendQueue.TryDequeue(out TcpClientPayload payload))
                 {
                     // Save the payload currently
                     // being sent to the send state
@@ -1362,7 +1274,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if (sendState.Token.Cancelled)
                     sendState.Dispose();
@@ -1383,7 +1295,7 @@ namespace sttp.communication
                 payload = sendState.Payload;
                 handle = payload.WaitHandle;
 
-                // Quit if this send loop has been cancelled
+                // Quit if this send loop has been canceled
                 if (sendState.Token.Cancelled)
                     return;
 
@@ -1431,7 +1343,7 @@ namespace sttp.communication
             }
             finally
             {
-                // If the operation was cancelled during execution,
+                // If the operation was canceled during execution,
                 // make sure to dispose of allocated resources
                 if ((object)sendState != null && sendState.Token.Cancelled)
                     sendState.Dispose();
@@ -1587,8 +1499,6 @@ namespace sttp.communication
         {
             if (CurrentState != ClientState.Disconnected)
                 base.OnSendDataException(ex);
-            else
-                Logger.SwallowException(ex, "TcpClient.cs: The client state was disconnected");
         }
 
         /// <summary>
@@ -1599,9 +1509,6 @@ namespace sttp.communication
         {
             if (ex.SocketErrorCode != SocketError.Disconnecting)
                 OnReceiveDataException((Exception)ex);
-            else
-                Logger.SwallowException(ex, "TcpClient.cs: The socket was disconnecting");
-
         }
 
         /// <summary>
@@ -1612,8 +1519,6 @@ namespace sttp.communication
         {
             if (CurrentState != ClientState.Disconnected)
                 base.OnReceiveDataException(ex);
-            else
-                Logger.SwallowException(ex, "TcpClient.cs: The socket was disconnected");
         }
 
         /// <summary>
@@ -1622,9 +1527,8 @@ namespace sttp.communication
         private void DumpPayloads()
         {
             SendState sendState = m_sendState;
-            TcpClientPayload payload;
 
-            // Quit if this send loop has been cancelled
+            // Quit if this send loop has been canceled
             if ((object)sendState == null || sendState.Token.Cancelled)
                 return;
 
@@ -1636,7 +1540,7 @@ namespace sttp.communication
                     if (sendState.Token.Cancelled)
                         return;
 
-                    if (sendState.SendQueue.TryDequeue(out payload))
+                    if (sendState.SendQueue.TryDequeue(out TcpClientPayload payload))
                     {
                         payload.WaitHandle.Set();
                         payload.WaitHandle.Dispose();

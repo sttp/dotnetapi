@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  FileClient.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,22 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  07/24/2006 - Pinal C. Patel
-//       Original version of source code generated.
-//  09/06/2006 - J. Ritchie Carroll
-//       Added bypass optimizations for high-speed file data access.
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  07/08/2009 - J. Ritchie Carroll
-//       Added WaitHandle return value from asynchronous connection.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  06/23/2010 - Stephen C. Wills
-//       Modified to use the absolute file path.
-//  11/29/2010 - Pinal C. Patel
-//       Corrected the implementation of ConnectAsync() method.
-//  12/04/2010 - Pinal C. Patel
-//       Removed locking around m_fileClient.Provider since it was unnecessary.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -40,10 +26,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Threading;
-using GSF.Configuration;
-using GSF.Diagnostics;
-using GSF.IO;
-using GSF.Threading;
+using System.Timers;
+using Timer = System.Timers.Timer;
 
 namespace sttp.communication
 {
@@ -213,13 +197,9 @@ namespace sttp.communication
         private FileAccess m_fileAccessMode;
         private readonly TransportProvider<FileStream> m_fileClient;
         private Dictionary<string, string> m_connectData;
-        private readonly SharedTimer m_receiveDataTimer;
+        private readonly Timer m_receiveDataTimer;
         private ManualResetEvent m_connectionHandle;
-#if ThreadTracking
-        private ManagedThread m_connectionThread;
-#else
         private Thread m_connectionThread;
-#endif
         private bool m_disposed;
 
         #endregion
@@ -249,7 +229,7 @@ namespace sttp.communication
             m_fileShareMode = DefaultFileShareMode;
             m_fileAccessMode = DefaultFileAccessMode;
             m_fileClient = new TransportProvider<FileStream>();
-            m_receiveDataTimer = s_timerScheduler.CreateTimer();
+            m_receiveDataTimer = new Timer();
             m_receiveDataTimer.Elapsed += m_receiveDataTimer_Elapsed;
         }
 
@@ -488,69 +468,11 @@ namespace sttp.communication
             m_connectionHandle = (ManualResetEvent)base.ConnectAsync();
 
             m_fileClient.SetReceiveBuffer(ReceiveBufferSize);
-
-#if ThreadTracking
-            m_connectionThread = new ManagedThread(OpenFile);
-            m_connectionThread.Name = "sttp.communication.FileClient.OpenFile()";
-#else
             m_connectionThread = new Thread(OpenFile);
             m_connectionThread.IsBackground = true;
-#endif
             m_connectionThread.Start();
 
             return m_connectionHandle;
-        }
-
-        /// <summary>
-        /// Saves <see cref="FileClient"/> settings to the config file if the <see cref="ClientBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void SaveSettings()
-        {
-            base.SaveSettings();
-
-            if (PersistSettings)
-            {
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings["AutoRepeat", true].Update(m_autoRepeat);
-                settings["ReceiveOnDemand", true].Update(m_receiveOnDemand);
-                settings["ReceiveInterval", true].Update(m_receiveInterval);
-                settings["StartingOffset", true].Update(m_startingOffset);
-                settings["FileOpenMode", true].Update(m_fileOpenMode);
-                settings["FileShareMode", true].Update(m_fileShareMode);
-                settings["FileAccessMode", true].Update(m_fileAccessMode);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved <see cref="FileClient"/> settings from the config file if the <see cref="ClientBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void LoadSettings()
-        {
-            base.LoadSettings();
-
-            if (PersistSettings)
-            {
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings.Add("AutoRepeat", m_autoRepeat, "True if receiving (reading) of data is to be repeated endlessly, otherwise False.");
-                settings.Add("ReceiveOnDemand", m_receiveOnDemand, "True if receiving (reading) of data will be initiated manually, otherwise False.");
-                settings.Add("ReceiveInterval", m_receiveInterval, "Number of milliseconds to pause before receiving (reading) the next available set of data.");
-                settings.Add("StartingOffset", m_startingOffset, "Starting point relative to the beginning of the file from where the data is to be received (read).");
-                settings.Add("FileOpenMode", m_fileOpenMode, "Open mode (CreateNew; Create; Open; OpenOrCreate; Truncate; Append) to be used when opening the file.");
-                settings.Add("FileShareMode", m_fileShareMode, "Share mode (None; Read; Write; ReadWrite; Delete; Inheritable) to be used when opening the file.");
-                settings.Add("FileAccessMode", m_fileAccessMode, "Access mode (Read; Write; ReadWrite) to be used when opening the file.");
-                AutoRepeat = settings["AutoRepeat"].ValueAs(m_autoRepeat);
-                ReceiveOnDemand = settings["ReceiveOnDemand"].ValueAs(m_receiveOnDemand);
-                ReceiveInterval = settings["ReceiveInterval"].ValueAs(m_receiveInterval);
-                StartingOffset = settings["StartingOffset"].ValueAs(m_startingOffset);
-                FileOpenMode = settings["FileOpenMode"].ValueAs(m_fileOpenMode);
-                FileShareMode = settings["FileShareMode"].ValueAs(m_fileShareMode);
-                FileAccessMode = settings["FileAccessMode"].ValueAs(m_fileAccessMode);
-            }
         }
 
         /// <summary>
@@ -725,7 +647,7 @@ namespace sttp.communication
             }
         }
 
-        private void m_receiveDataTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void m_receiveDataTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             ReadData();
         }
@@ -738,24 +660,6 @@ namespace sttp.communication
         {
             base.Disconnect();
             base.OnConnectionException(ex);
-        }
-
-        #endregion
-
-        #region [ Static ]
-
-        // Static Fields
-
-        // Common use static timer for FileClient instances
-        private static readonly SharedTimerScheduler s_timerScheduler;
-
-        //Static Constructor
-        static FileClient()
-        {
-            using (Logger.AppendStackMessages("Owner", "FileClient"))
-            {
-                s_timerScheduler = new SharedTimerScheduler();
-            }
         }
 
         #endregion

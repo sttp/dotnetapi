@@ -1,14 +1,14 @@
 ﻿//******************************************************************************************************
 //  UdpClient.cs - Gbtc
 //
-//  Copyright © 2012, Grid Protection Alliance.  All Rights Reserved.
+//  Copyright © 2019, Grid Protection Alliance.  All Rights Reserved.
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,47 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  07/06/2006 - Pinal C. Patel
-//       Original version of source code generated.
-//  09/06/2006 - J. Ritchie Carroll
-//       Added bypass optimizations for high-speed socket access.
-//  09/27/2007 - J. Ritchie Carroll
-//       Added disconnect timeout overload.
-//  09/29/2008 - J. Ritchie Carroll
-//       Converted to C#.
-//  07/08/2009 - J. Ritchie Carroll
-//       Added WaitHandle return value from asynchronous connection.
-//  07/09/2009 - Pinal C. Patel
-//       Modified to attempt resuming reception on SocketException for non-Handshake enabled connection.
-//  07/15/2009 - Pinal C. Patel
-//       Modified Disconnect() to add error checking.
-//  07/17/2009 - Pinal C. Patel
-//       Added support to specify a specific interface address on a multiple interface machine.
-//  07/20/2009 - Pinal C. Patel
-//       Allowed for UDP endpoint to not be bound to a local interface by specifying -1 for port number.
-//  09/14/2009 - Stephen C. Wills
-//       Added new header and license agreement.
-//  10/30/2009 - Pinal C. Patel
-//       Added true multicast support by allowing for socket level subscription to a multicast group.
-//  11/17/2009 - Pinal C. Patel
-//       Fixed a issue in the creation of random server endpoint when server endpoint information is 
-//       omitted from the ConnectionString.
-//  03/24/2010 - Pinal C. Patel
-//       Updated the interpretation of server property in ConnectionString to correctly interpret 
-//       IPv6 IP addresses according to IETF - A Recommendation for IPv6 Address Text Representation.
-//  11/29/2010 - Pinal C. Patel
-//       Corrected the implementation of ConnectAsync() method.
-//  02/13/2011 - Pinal C. Patel
-//       Modified ConnectAsync() to handle loop-back address resolution failure on IPv6 enabled OSes.
-//  07/23/2012 - Stephen C. Wills
-//       Performed a full refactor to use the SocketAsyncEventArgs API calls.
-//  10/31/2012 - Stephen C. Wills
-//       Replaced single-threaded BlockingCollection pattern with asynchronous loop pattern.
-//  12/13/2012 - Starlynn Danyelle Gilliam
-//       Modified Header.
-//  09/24/2015 - Allan V. Scheid
-//       Fixed Mono socket error with System.Net.Sockets.Socket.IOControl method and SIO_UDP_CONNRESET
-//       inside OpenPort().
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -64,14 +25,13 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using GSF.Configuration;
-using GSF.IO;
-using GSF.Threading;
+using sttp.threading;
 
 namespace sttp.communication
 {
@@ -237,7 +197,6 @@ namespace sttp.communication
         public event EventHandler<EventArgs<EndPoint, IPPacketInformation, byte[], int>> ReceiveDataFromComplete;
 
         // Fields
-        //private bool m_destinationReachableCheck;
         private IPEndPoint m_udpServer;
         private TransportProvider<Socket> m_udpClient;
         private IPStack m_ipStack;
@@ -246,11 +205,7 @@ namespace sttp.communication
         private int m_maxSendQueueSize;
         private Dictionary<string, string> m_connectData;
         private ManualResetEvent m_connectionHandle;
-#if ThreadTracking
-        private ManagedThread m_connectionThread;
-#else
         private Thread m_connectionThread;
-#endif
 
         private int m_sending;
         private int m_receiving;
@@ -473,47 +428,6 @@ namespace sttp.communication
         }
 
         /// <summary>
-        /// Saves <see cref="TcpServer"/> settings to the config file if the <see cref="ServerBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void SaveSettings()
-        {
-            base.SaveSettings();
-            if (PersistSettings)
-            {
-                // Save settings under the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings["AllowDualStackSocket", true].Update(m_allowDualStackSocket);
-                settings["MaxSendQueueSize", true].Update(m_maxSendQueueSize);
-                config.Save();
-            }
-        }
-
-        /// <summary>
-        /// Loads saved <see cref="TcpServer"/> settings from the config file if the <see cref="ServerBase.PersistSettings"/> property is set to true.
-        /// </summary>
-        public override void LoadSettings()
-        {
-            int maxSendQueueSize;
-
-            base.LoadSettings();
-            if (PersistSettings)
-            {
-                // Load settings from the specified category.
-                ConfigurationFile config = ConfigurationFile.Current;
-                CategorizedSettingsElementCollection settings = config.Settings[SettingsCategory];
-                settings.Add("AllowDualStackSocket", m_allowDualStackSocket, "True if dual-mode socket is allowed when IP address is IPv6, otherwise False.");
-                settings.Add("MaxSendQueueSize", m_maxSendQueueSize, "The maximum size of the send queue before payloads are dumped from the queue.");
-                AllowDualStackSocket = settings["AllowDualStackSocket"].ValueAs(m_allowDualStackSocket);
-                MaxSendQueueSize = settings["MaxSendQueueSize"].ValueAs(m_maxSendQueueSize);
-
-                // Overwrite config file if max send queue size exists in connection string.
-                if (m_connectData.ContainsKey("maxSendQueueSize") && int.TryParse(m_connectData["maxSendQueueSize"], out maxSendQueueSize))
-                    m_maxSendQueueSize = maxSendQueueSize;
-            }
-        }
-
-        /// <summary>
         /// Disconnects the <see cref="UdpClient"/> from the connected server synchronously.
         /// </summary>
         public override void Disconnect()
@@ -579,12 +493,7 @@ namespace sttp.communication
                 m_udpServer = Transport.CreateEndPoint(m_connectData["interface"], 0, m_ipStack);
             }
 
-#if ThreadTracking
-            m_connectionThread = new ManagedThread(OpenPort);
-            m_connectionThread.Name = "sttp.communication.UdpClient.OpenPort()";
-#else
             m_connectionThread = new Thread(OpenPort);
-#endif
             m_connectionThread.Start();
 
             return m_connectionHandle;
@@ -597,8 +506,7 @@ namespace sttp.communication
         /// <param name="sourceAddress">Address which defines the source of the data or null if the membership is not source-specific.</param>
         public void AddMulticastMembership(IPAddress serverAddress, IPAddress sourceAddress)
         {
-            byte[] multicastMembershipAddresses;
-            AddMulticastMembership(serverAddress, sourceAddress, out multicastMembershipAddresses);
+            AddMulticastMembership(serverAddress, sourceAddress, out byte[] _);
         }
 
         /// <summary>
@@ -660,9 +568,6 @@ namespace sttp.communication
         /// <exception cref="ArgumentOutOfRangeException">Port property value is not between <see cref="Transport.PortRangeLow"/> and <see cref="Transport.PortRangeHigh"/>.</exception>
         protected override void ValidateConnectionString(string connectionString)
         {
-            string setting;
-            int value;
-
             m_connectData = connectionString.ParseKeyValuePairs();
 
             // Derive desired IP stack based on specified "interface" setting, adding setting if it's not defined
@@ -689,7 +594,7 @@ namespace sttp.communication
                 m_connectData.Add("multicastTimeToLive", "10");
 
             // Make sure a valid multi-cast time-to-live value is defined in the connection string
-            if (!(m_connectData.TryGetValue("multicastTimeToLive", out setting) && int.TryParse(setting, out value)))
+            if (!(m_connectData.TryGetValue("multicastTimeToLive", out string setting) && int.TryParse(setting, out int value)))
                 m_connectData["multicastTimeToLive"] = "10";
         }
 
@@ -709,11 +614,12 @@ namespace sttp.communication
                     m_udpClient.Provider = Transport.CreateSocket(m_connectData["interface"], int.Parse(m_connectData["port"]), ProtocolType.Udp, m_ipStack, m_allowDualStackSocket);
 
                     // Disable SocketError.ConnectionReset exception from being thrown when the endpoint is not listening.
-                    // Fix MONO bug with SIO_UDP_CONNRESET
+                    // Handle MONO issue with SIO_UDP_CONNRESET
                     try
                     {
                         m_udpClient.Provider.IOControl(SIO_UDP_CONNRESET, new[] { Convert.ToByte(false) }, null);
                     }
+                    // ReSharper disable once EmptyGeneralCatchClause
                     catch
                     {
                     }
@@ -725,14 +631,12 @@ namespace sttp.communication
 
                     if (Transport.IsMulticastIP(serverEndpoint.Address))
                     {
-                        string multicastSource;
-                        byte[] multicastMembershipAddresses;
                         IPAddress sourceAddress = null;
 
-                        if (m_connectData.TryGetValue("multicastSource", out multicastSource))
+                        if (m_connectData.TryGetValue("multicastSource", out string multicastSource))
                             sourceAddress = IPAddress.Parse(multicastSource);
 
-                        AddMulticastMembership(serverEndpoint.Address, sourceAddress, out multicastMembershipAddresses);
+                        AddMulticastMembership(serverEndpoint.Address, sourceAddress, out byte[] multicastMembershipAddresses);
                         m_udpClient.MulticastMembershipAddresses = multicastMembershipAddresses;
                     }
 
@@ -815,7 +719,6 @@ namespace sttp.communication
         public WaitHandle SendDataToAsync(byte[] data, int offset, int length, EndPoint destination)
         {
             UdpClientPayload payload;
-            UdpClientPayload dequeuedPayload;
             ManualResetEventSlim handle;
 
             if (CurrentState != ClientState.Connected)
@@ -843,7 +746,7 @@ namespace sttp.communication
                 // Send the next queued payload.
                 if (Interlocked.CompareExchange(ref m_sending, 1, 0) == 0)
                 {
-                    if (m_sendQueue.TryDequeue(out dequeuedPayload))
+                    if (m_sendQueue.TryDequeue(out UdpClientPayload dequeuedPayload))
                         ThreadPool.QueueUserWorkItem(state => SendPayload((UdpClientPayload)state), dequeuedPayload);
                     else
                         Interlocked.Exchange(ref m_sending, 0);
@@ -940,7 +843,7 @@ namespace sttp.communication
         private void ProcessSend()
         {
             UdpClientPayload payload = null;
-            ManualResetEventSlim handle = null;
+            ManualResetEventSlim handle;
 
             try
             {
@@ -1123,7 +1026,7 @@ namespace sttp.communication
                     if (localAddress.AddressFamily != serverAddress.AddressFamily)
                         throw new InvalidOperationException($"Local address \"{localAddress}\" is not in the same IP format as server address \"{serverAddress}\"");
 
-                    using (BlockAllocatedMemoryStream membershipAddresses = new BlockAllocatedMemoryStream())
+                    using (MemoryStream membershipAddresses = new MemoryStream())
                     {
                         byte[] serverAddressBytes = serverAddress.GetAddressBytes();
                         byte[] sourceAddressBytes = sourceAddress.GetAddressBytes();
@@ -1143,7 +1046,6 @@ namespace sttp.communication
             }
             catch (SocketException ex)
             {
-                // TODO: Need to add comment as to why this is necessary...
                 if (ex.SocketErrorCode != SocketError.InvalidArgument)
                     throw;
             }
@@ -1173,7 +1075,7 @@ namespace sttp.communication
                         if (localAddress.AddressFamily != serverAddress.AddressFamily)
                             throw new InvalidOperationException($"Local address \"{localAddress}\" is not in the same IP format as server address \"{serverAddress}\"");
 
-                        using (BlockAllocatedMemoryStream membershipAddresses = new BlockAllocatedMemoryStream())
+                        using (MemoryStream membershipAddresses = new MemoryStream())
                         {
                             byte[] serverAddressBytes = serverAddress.GetAddressBytes();
                             byte[] sourceAddressBytes = sourceAddress.GetAddressBytes();
@@ -1203,14 +1105,12 @@ namespace sttp.communication
         /// </summary>
         private void DumpPayloads()
         {
-            UdpClientPayload payload;
-
             // Check to see if the client has reached the maximum send queue size.
             if (m_maxSendQueueSize > 0 && m_sendQueue.Count >= m_maxSendQueueSize)
             {
                 for (int i = 0; i < m_maxSendQueueSize; i++)
                 {
-                    if (m_sendQueue.TryDequeue(out payload))
+                    if (m_sendQueue.TryDequeue(out UdpClientPayload payload))
                     {
                         payload.WaitHandle.Set();
                         payload.WaitHandle.Dispose();

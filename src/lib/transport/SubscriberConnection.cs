@@ -5,10 +5,10 @@
 //
 //  Licensed to the Grid Protection Alliance (GPA) under one or more contributor license agreements. See
 //  the NOTICE file distributed with this work for additional information regarding copyright ownership.
-//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may
-//  not use this file except in compliance with the License. You may obtain a copy of the License at:
+//  The GPA licenses this file to you under the MIT License (MIT), the "License"; you may not use this
+//  file except in compliance with the License. You may obtain a copy of the License at:
 //
-//      http://www.opensource.org/licenses/MIT
+//      http://opensource.org/licenses/MIT
 //
 //  Unless agreed to in writing, the subject software distributed under the License is distributed on an
 //  "AS-IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. Refer to the
@@ -16,8 +16,8 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  06/24/2011 - Ritchie
-//       Generated original version of source code.
+//  04/14/2019 - J. Ritchie Carroll
+//       Imported source code from Grid Solutions Framework.
 //
 //******************************************************************************************************
 
@@ -28,6 +28,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Timers;
+using sttp.communication;
+using Timer = System.Timers.Timer;
 
 namespace sttp.transport
 {
@@ -48,14 +51,12 @@ namespace sttp.transport
         private DataPublisher m_parent;
         private byte[] m_clientDataBuffer;
         private int m_clientDataBufferLength;
-
         private readonly Guid m_clientID;
         private Guid m_subscriberID;
         private readonly string m_connectionID;
         private readonly string m_hostName;
         private string m_subscriberAcronym;
         private string m_subscriberName;
-        //private string m_sharedSecret;
         private string m_subscriberInfo;
         private SubscriberAdapter m_subscription;
         private volatile bool m_authenticated;
@@ -69,8 +70,8 @@ namespace sttp.transport
         private bool m_connectionEstablished;
         private bool m_isSubscribed;
         private Ticks m_lastCipherKeyUpdateTime;
-        private SharedTimer m_pingTimer;
-        private SharedTimer m_reconnectTimer;
+        private Timer m_pingTimer;
+        private Timer m_reconnectTimer;
         private OperationalModes m_operationalModes;
         private Encoding m_encoding;
         private bool m_disposed;
@@ -96,13 +97,13 @@ namespace sttp.transport
             m_cipherIndex = 0;
 
             // Setup ping timer
-            m_pingTimer = Common.TimerScheduler.CreateTimer(5000);
+            m_pingTimer = new Timer(5000);
             m_pingTimer.AutoReset = true;
             m_pingTimer.Elapsed += m_pingTimer_Elapsed;
             m_pingTimer.Start();
 
             // Setup reconnect timer
-            m_reconnectTimer = Common.TimerScheduler.CreateTimer(1000);
+            m_reconnectTimer = new Timer(1000);
             m_reconnectTimer.AutoReset = false;
             m_reconnectTimer.Elapsed += m_reconnectTimer_Elapsed;
 
@@ -358,11 +359,10 @@ namespace sttp.transport
                 else
                 {
                     Dictionary<string, string> settings = value.ParseKeyValuePairs();
-                    string source, version, buildDate;
 
-                    settings.TryGetValue("source", out source);
-                    settings.TryGetValue("version", out version);
-                    settings.TryGetValue("buildDate", out buildDate);
+                    settings.TryGetValue("source", out string source);
+                    settings.TryGetValue("version", out string version);
+                    settings.TryGetValue("buildDate", out string buildDate);
 
                     m_subscriberInfo = $"{source.ToNonNullNorWhiteSpace("unknown source")} version {version.ToNonNullNorWhiteSpace("?.?.?.?")} built on {buildDate.ToNonNullNorWhiteSpace("undefined date")}";
                 }
@@ -382,21 +382,6 @@ namespace sttp.transport
             get => m_authenticated;
             set => m_authenticated = value;
         }
-
-        ///// <summary>
-        ///// Gets or sets shared secret used to lookup cipher keys only known to client and server.
-        ///// </summary>
-        //public string SharedSecret
-        //{
-        //    get
-        //    {
-        //        return m_sharedSecret;
-        //    }
-        //    set
-        //    {
-        //        m_sharedSecret = value;
-        //    }
-        //}
 
         /// <summary>
         /// Gets active and standby keys and initialization vectors.
@@ -697,19 +682,16 @@ namespace sttp.transport
             TcpServer tcpCommandChannel = m_commandChannel as TcpServer;
             TlsServer tlsCommandChannel = m_commandChannel as TlsServer;
 
-            TransportProvider<Socket> tcpProvider;
-            TransportProvider<TlsServer.TlsSocket> tlsProvider;
-
-            if ((object)tcpCommandChannel != null && tcpCommandChannel.TryGetClient(m_clientID, out tcpProvider))
+            if ((object)tcpCommandChannel != null && tcpCommandChannel.TryGetClient(m_clientID, out TransportProvider<Socket> tcpProvider))
                 return tcpProvider.Provider;
 
-            if ((object)tlsCommandChannel != null && tlsCommandChannel.TryGetClient(m_clientID, out tlsProvider))
+            if ((object)tlsCommandChannel != null && tlsCommandChannel.TryGetClient(m_clientID, out TransportProvider<TlsServer.TlsSocket> tlsProvider))
                 return tlsProvider.Provider.Socket;
 
             return null;
         }
 
-        private void m_pingTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void m_pingTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             // Send a no-op keep-alive ping to make sure the client is still connected
             m_parent.SendClientResponse(m_clientID, ServerResponse.NoOP, ServerCommand.Subscribe);
@@ -747,7 +729,7 @@ namespace sttp.transport
             }
         }
 
-        private void m_reconnectTimer_Elapsed(object sender, EventArgs<DateTime> e)
+        private void m_reconnectTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             try
             {
