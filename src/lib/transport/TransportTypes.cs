@@ -24,6 +24,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Data;
+using System.IO;
 using System.Threading;
 
 namespace sttp.transport
@@ -123,6 +124,45 @@ namespace sttp.transport
             get;
             set;
         }
+    }
+
+    /// <summary>
+    /// Defines a <see cref="IMeasurement"/> that supports binary image functions.
+    /// </summary>
+    public interface IBinaryMeasurement : IMeasurement
+    {
+        /// <summary>
+        /// Gets the length of the binary image.
+        /// </summary>
+        int BinaryLength
+        {
+            get;
+        }
+
+        /// <summary>
+        /// Initializes object by parsing the specified <paramref name="buffer"/> containing a binary image.
+        /// </summary>
+        /// <param name="buffer">Buffer containing binary image to parse.</param>
+        /// <param name="startIndex">0-based starting index in the <paramref name="buffer"/> to start parsing.</param>
+        /// <param name="length">Valid number of bytes within <paramref name="buffer"/> to read from <paramref name="startIndex"/>.</param>
+        /// <returns>The number of bytes used for initialization in the <paramref name="buffer"/> (i.e., the number of bytes parsed).</returns>
+        /// <remarks>
+        /// Implementers should validate <paramref name="startIndex"/> and <paramref name="length"/> against <paramref name="buffer"/> length.
+        /// The <see cref="CommonExtensions.ValidateParameters{T}"/> method can be used to perform this validation.
+        /// </remarks>
+        int ParseBinaryImage(byte[] buffer, int startIndex, int length);
+
+        /// <summary>
+        /// Generates binary image of the object and copies it into the given buffer, for <see cref="BinaryLength"/> bytes.
+        /// </summary>
+        /// <param name="buffer">Buffer used to hold generated binary image of the source object.</param>
+        /// <param name="startIndex">0-based starting index in the <paramref name="buffer"/> to start writing.</param>
+        /// <returns>The number of bytes written to the <paramref name="buffer"/>.</returns>
+        /// <remarks>
+        /// Implementers should validate <paramref name="startIndex"/> and <see cref="BinaryLength"/> against <paramref name="buffer"/> length.
+        /// The <see cref="CommonExtensions.ValidateParameters{T}"/> method can be used to perform this validation.
+        /// </remarks>
+        int GenerateBinaryImage(byte[] buffer, int startIndex);
     }
 
     /// <summary>
@@ -771,5 +811,77 @@ namespace sttp.transport
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Defines extension functions related to <see cref="IBinaryMeasurement"/> implementations.
+    /// </summary>
+    public static class IBinaryMeasurementExtensions
+    {
+        /// <summary>
+        /// Returns a binary image of an object that implements <see cref="IBinaryMeasurement"/>.
+        /// </summary>
+        /// <param name="imageSource"><see cref="IBinaryMeasurement"/> source.</param>
+        /// <returns>A binary image of an object that implements <see cref="IBinaryMeasurement"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="imageSource"/> cannot be null.</exception>
+        /// <remarks>
+        /// This is a convenience method. It is often optimal to use <see cref="IBinaryMeasurement.GenerateBinaryImage"/>
+        /// directly using a common buffer instead of always allocating new buffers.
+        /// </remarks>
+        public static byte[] BinaryImage(this IBinaryMeasurement imageSource)
+        {
+            if ((object)imageSource == null)
+                throw new ArgumentNullException(nameof(imageSource));
+
+            byte[] buffer = new byte[imageSource.BinaryLength];
+
+            imageSource.GenerateBinaryImage(buffer, 0);
+
+            return buffer;
+        }
+
+        /// <summary>
+        /// Copies binary image of object that implements <see cref="IBinaryMeasurement"/> to a <see cref="Stream"/>.
+        /// </summary>
+        /// <param name="imageSource"><see cref="IBinaryMeasurement"/> source.</param>
+        /// <param name="stream">Destination <see cref="Stream"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="imageSource"/> cannot be null.</exception>
+        public static void CopyBinaryImageToStream(this IBinaryMeasurement imageSource, Stream stream)
+        {
+            if ((object)imageSource == null)
+                throw new ArgumentNullException(nameof(imageSource));
+
+            int length = imageSource.BinaryLength;
+            byte[] buffer = new byte[length];
+
+            // Copy generated binary image to buffer
+            int writeCount = imageSource.GenerateBinaryImage(buffer, 0);
+
+            // Write buffer bytes to stream, if any were generated
+            if (writeCount > 0)
+                stream.Write(buffer, 0, writeCount);
+        }
+
+        /// <summary>
+        /// Parses binary image of object that implements <see cref="IBinaryMeasurement"/> from a <see cref="Stream"/>.
+        /// </summary>
+        /// <param name="imageSource"><see cref="IBinaryMeasurement"/> source.</param>
+        /// <param name="stream">Source <see cref="Stream"/>.</param>
+        /// <returns>The number of bytes parsed from the <paramref name="stream"/>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="imageSource"/> cannot be null.</exception>
+        public static int ParseBinaryImageFromStream(this IBinaryMeasurement imageSource, Stream stream)
+        {
+            if ((object)imageSource == null)
+                throw new ArgumentNullException(nameof(imageSource));
+
+            int length = imageSource.BinaryLength;
+            byte[] buffer = new byte[length];
+
+            // Read buffer bytes from stream
+            int readCount = stream.Read(buffer, 0, length);
+
+            // Parse binary image from buffer bytes read from stream
+            return imageSource.ParseBinaryImage(buffer, 0, readCount);
+        }
     }
 }

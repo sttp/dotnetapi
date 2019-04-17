@@ -21,13 +21,13 @@
 //
 //******************************************************************************************************
 
+using sttp.transport.tssc;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Timers;
-using sttp.transport.tssc;
 using Timer = System.Timers.Timer;
 
 // ReSharper disable PossibleMultipleEnumeration
@@ -208,7 +208,7 @@ namespace sttp.transport
         /// We override method so assignment can be synchronized such that dynamic updates won't interfere
         /// with filtering in <see cref="QueueMeasurementsForProcessing"/>.
         /// </remarks>
-        public override MeasurementKey[] InputMeasurementKeys
+        public MeasurementKey[] InputMeasurementKeys
         {
             get => base.InputMeasurementKeys;
             set
@@ -232,7 +232,7 @@ namespace sttp.transport
         /// <summary>
         /// Gets a formatted message describing the status of this <see cref="SubscriberAdapter"/>.
         /// </summary>
-        public override string Status
+        public string Status
         {
             get
             {
@@ -261,7 +261,7 @@ namespace sttp.transport
         /// Releases the unmanaged resources used by the <see cref="SubscriberAdapter"/> object and optionally releases the managed resources.
         /// </summary>
         /// <param name="disposing">true to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
-        protected override void Dispose(bool disposing)
+        protected void Dispose(bool disposing)
         {
             if (!m_disposed)
             {
@@ -293,7 +293,7 @@ namespace sttp.transport
         /// <summary>
         /// Initializes <see cref="SubscriberAdapter"/>.
         /// </summary>
-        public override void Initialize()
+        public void Initialize()
         {
             MeasurementKey[] inputMeasurementKeys;
 
@@ -301,7 +301,7 @@ namespace sttp.transport
             {
                 // IMPORTANT: The allowSelect argument of ParseInputMeasurementKeys must be null
                 //            in order to prevent SQL injection via the subscription filter expression
-                inputMeasurementKeys = ParseInputMeasurementKeys(DataSource, false, setting);
+                inputMeasurementKeys = FilterExpressionParser.ParseInputMeasurementKeys(DataSource, setting);
                 m_requestedInputFilter = setting;
 
                 // IMPORTANT: We need to remove the setting before calling base.Initialize()
@@ -362,7 +362,7 @@ namespace sttp.transport
         /// <summary>
         /// Starts the <see cref="SubscriberAdapter"/> or restarts it if it is already running.
         /// </summary>
-        public override void Start()
+        public void Start()
         {
             if (!Enabled)
                 m_startTimeSent = false;
@@ -379,7 +379,7 @@ namespace sttp.transport
         /// <summary>
         /// Stops the <see cref="SubscriberAdapter"/>.
         /// </summary>	
-        public override void Stop()
+        public void Stop()
         {
             base.Stop();
 
@@ -391,34 +391,16 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Gets a short one-line status of this <see cref="SubscriberAdapter"/>.
-        /// </summary>
-        /// <param name="maxLength">Maximum number of available characters for display.</param>
-        /// <returns>A short one-line summary of the current status of this <see cref="AdapterBase"/>.</returns>
-        public override string GetShortStatus(int maxLength)
-        {
-            int inputCount = 0, outputCount = 0;
-
-            if ((object)InputMeasurementKeys != null)
-                inputCount = InputMeasurementKeys.Length;
-
-            if ((object)OutputMeasurements != null)
-                outputCount = OutputMeasurements.Length;
-
-            return $"Total input measurements: {inputCount}, total output measurements: {outputCount}".PadLeft(maxLength);
-        }
-
-        /// <summary>
         /// Queues a collection of measurements for processing.
         /// </summary>
         /// <param name="measurements">Collection of measurements to queue for processing.</param>
         /// <remarks>
-        /// Measurements are filtered against the defined <see cref="InputMeasurementKeys"/> so we override method
+        /// Measurements are filtered against the defined <see cref="InputMeasurementKeys"/> so we method
         /// so that dynamic updates to keys will be synchronized with filtering to prevent interference.
         /// </remarks>
         // IMPORTANT: TSSC is sensitive to order - always make sure this function gets called sequentially, concurrent
         // calls to this function can cause TSSC parsing to get out of sequence and fail
-        public override void QueueMeasurementsForProcessing(IEnumerable<IMeasurement> measurements)
+        public void QueueMeasurementsForProcessing(IEnumerable<IMeasurement> measurements)
         {
             if ((object)measurements == null)
                 return;
@@ -538,6 +520,18 @@ namespace sttp.transport
                 if (m_bufferBlockCache.Count > 0)
                     m_bufferBlockRetransmissionTimer.Start();
             }
+        }
+
+        protected internal virtual void OnStatusMessage(MessageLevel level, string status, string eventName = null)
+        {
+            // TODO: Raise event
+            //base.OnStatusMessage(level, status, eventName, flags);
+        }
+
+        protected internal virtual void OnProcessException(MessageLevel level, Exception exception, string eventName = null)
+        {
+            // TODO: Raise event
+            //base.OnProcessException(level, exception, eventName, flags);
         }
 
         private void ProcessMeasurements(IEnumerable<IMeasurement> measurements)
@@ -672,20 +666,9 @@ namespace sttp.transport
                 // Serialize total number of measurement values to follow
                 workingBuffer.Write(BigEndian.GetBytes(measurements.Count()), 0, 4);
 
-                //// Attempt compression when requested - encoding of compressed buffer only happens if size would be smaller than normal serialization
-                //if (!usePayloadCompression || !measurements.Cast<CompactMeasurement>().CompressPayload(workingBuffer, m_compressionStrength, m_includeTime, ref flags))
-                //{
                 // Serialize measurements to data buffer
                 foreach (IBinaryMeasurement measurement in measurements)
                     measurement.CopyBinaryImageToStream(workingBuffer);
-                //}
-
-                //// Update data packet flags if it has updated compression flags
-                //if ((flags & DataPacketFlags.Compressed) > 0)
-                //{
-                //    workingBuffer.Seek(0, SeekOrigin.Begin);
-                //    workingBuffer.WriteByte((byte)flags);
-                //}
 
                 // Publish data packet to client
                 if ((object)m_parent != null)

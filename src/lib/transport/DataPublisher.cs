@@ -21,6 +21,9 @@
 //
 //******************************************************************************************************
 
+using sttp.communication;
+using sttp.security;
+using sttp.units;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -34,13 +37,9 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Timers;
 using System.Xml;
-using sttp.communication;
-using sttp.security;
-using sttp.units;
 using Timer = System.Timers.Timer;
 
 namespace sttp.transport
@@ -768,7 +767,6 @@ namespace sttp.transport
             // Return enumeration
             return clientEnumeration.ToString();
         }
-0-
         private string GetOperationalModes(SubscriberConnection connection)
         {
             StringBuilder description = new StringBuilder();
@@ -937,7 +935,7 @@ namespace sttp.transport
         /// <param name="message">The message to be sent.</param>
         public virtual void SendNotification(string message)
         {
-            string notification = $"[{DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff")}] {message}";
+            string notification = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {message}";
 
             lock (m_clientNotificationsLock)
             {
@@ -1347,13 +1345,13 @@ namespace sttp.transport
                     }
                     catch (Exception ex)
                     {
-                        OnProcessException(MessageLevel.Error, new InvalidOperationException($"Failed to add subscriber \"{subscriber["Acronym"].ToNonNullNorEmptyString("[UNKNOWN]")}\" certificate to trusted certificates: {ex.Message}", ex), flags: MessageFlags.SecurityMessage);
+                        OnProcessException(MessageLevel.Error, new InvalidOperationException($"Failed to add subscriber \"{subscriber["Acronym"].ToNonNullNorEmptyString("[UNKNOWN]")}\" certificate to trusted certificates: {ex.Message}", ex));
                     }
                 }
             }
             catch (Exception ex)
             {
-                OnProcessException(MessageLevel.Error, new InvalidOperationException($"Failed to update certificate checker: {ex.Message}", ex), flags: MessageFlags.SecurityMessage);
+                OnProcessException(MessageLevel.Error, new InvalidOperationException($"Failed to update certificate checker: {ex.Message}", ex));
             }
         }
 
@@ -1369,7 +1367,6 @@ namespace sttp.transport
                 MeasurementKey[] requestedInputs;
                 HashSet<MeasurementKey> authorizedSignals;
                 Func<Guid, bool> hasRightsFunc = id => true;
-                Guid subscriberID;
                 string message;
 
                 // Determine if the connection has been disabled or removed - make sure to set authenticated to false if necessary
@@ -1383,7 +1380,6 @@ namespace sttp.transport
                     // from the remote subscription - this will prevent possible SQL injection attacks.
                     requestedInputs = FilterExpressionParser.ParseInputMeasurementKeys(DataSource, subscription.RequestedInputFilter);
                     authorizedSignals = new HashSet<MeasurementKey>();
-                    subscriberID = subscription.SubscriberID;
 
                     foreach (MeasurementKey input in requestedInputs)
                     {
@@ -1402,7 +1398,7 @@ namespace sttp.transport
             }
             catch (Exception ex)
             {
-                OnProcessException(MessageLevel.Error, new InvalidOperationException($"Failed to update authorized signal rights for \"{connection.ConnectionID}\" - connection will be terminated: {ex.Message}", ex), flags: MessageFlags.SecurityMessage);
+                OnProcessException(MessageLevel.Error, new InvalidOperationException($"Failed to update authorized signal rights for \"{connection.ConnectionID}\" - connection will be terminated: {ex.Message}", ex));
 
                 // If we can't assign rights, terminate connection
                 ThreadPool.QueueUserWorkItem(DisconnectClient, connection.ClientID);
@@ -1696,13 +1692,13 @@ namespace sttp.transport
             }
         }
 
-        protected internal virtual void OnStatusMessage(MessageLevel level, string status, string eventName = null, MessageFlags flags = MessageFlags.None)
+        protected internal virtual void OnStatusMessage(MessageLevel level, string status, string eventName = null)
         {
             // TODO: Raise event
             //base.OnStatusMessage(level, status, eventName, flags);
         }
 
-        protected internal virtual void OnProcessException(MessageLevel level, Exception exception, string eventName = null, MessageFlags flags = MessageFlags.None)
+        protected internal virtual void OnProcessException(MessageLevel level, Exception exception, string eventName = null)
         {
             // TODO: Raise event
             //base.OnProcessException(level, exception, eventName, flags);
@@ -1993,158 +1989,7 @@ namespace sttp.transport
         /// <returns>Meta-data to be returned to client.</returns>
         protected virtual DataSet AquireMetadata(SubscriberConnection connection, Dictionary<string, Tuple<string, string, int>> filterExpressions)
         {
-            using (AdoDataConnection adoDatabase = new AdoDataConnection("systemSettings"))
-            {
-                IDbConnection dbConnection = adoDatabase.Connection;
-                DataSet metadata = new DataSet();
-                DataTable table;
-                string sortField;
-                int takeCount;
-
-                // Initialize active node ID
-                Guid nodeID = Guid.Parse(dbConnection.ExecuteScalar($"SELECT NodeID FROM IaonActionAdapter WHERE ID = {ID}").ToString());
-
-                // Determine whether we're sending internal and external meta-data
-                bool sendExternalMetadata = connection.OperationalModes.HasFlag(OperationalModes.ReceiveExternalMetadata);
-                bool sendInternalMetadata = connection.OperationalModes.HasFlag(OperationalModes.ReceiveInternalMetadata);
-
-                // Copy key meta-data tables
-                foreach (string tableExpression in m_metadataTables.Split(';'))
-                {
-                    if (string.IsNullOrWhiteSpace(tableExpression))
-                        continue;
-
-                    // Query the table or view information from the database
-                    table = dbConnection.RetrieveData(adoDatabase.AdapterType, tableExpression);
-
-                    // Remove any expression from table name
-                    Match regexMatch = Regex.Match(tableExpression, @"FROM \w+");
-                    table.TableName = regexMatch.Value.Split(' ')[1];
-
-                    sortField = "";
-                    takeCount = int.MaxValue;
-
-                    // Build filter list
-                    List<string> filters = new List<string>();
-
-                    if (table.Columns.Contains("NodeID"))
-                        filters.Add($"NodeID = '{nodeID}'");
-
-                    if (table.Columns.Contains("Internal") && !(sendInternalMetadata && sendExternalMetadata))
-                        filters.Add($"Internal {(sendExternalMetadata ? "=" : "<>")} 0");
-
-                    if (table.Columns.Contains("OriginalSource") && !(sendInternalMetadata && sendExternalMetadata))
-                        filters.Add($"OriginalSource IS {(sendExternalMetadata ? "NOT" : "")} NULL");
-
-                    if (filterExpressions.TryGetValue(table.TableName, out Tuple<string, string, int> filterParameters))
-                    {
-                        filters.Add($"({filterParameters.Item1})");
-                        sortField = filterParameters.Item2;
-                        takeCount = filterParameters.Item3;
-                    }
-
-                    // Determine whether we need to check subscriber for rights to the data
-                    bool checkSubscriberRights = false; // RequireAuthentication && table.Columns.Contains("SignalID");
-
-                    if (m_sharedDatabase || (filters.Count == 0 && !checkSubscriberRights))
-                    {
-                        // Add a copy of the results to the dataset for meta-data exchange
-                        metadata.Tables.Add(table.Copy());
-                    }
-                    else
-                    {
-                        IEnumerable<DataRow> filteredRows;
-                        List<DataRow> filteredRowList;
-
-                        // Make a copy of the table structure
-                        metadata.Tables.Add(table.Clone());
-
-                        // Filter in-memory data table down to desired rows
-                        filteredRows = table.Select(string.Join(" AND ", filters), sortField);
-
-                        // Reduce data to only what the subscriber has rights to
-                        // ReSharper disable once AccessToDisposedClosure
-                        if (checkSubscriberRights)
-                        {
-                            SubscriberRightsLookup lookup = new SubscriberRightsLookup(DataSource, connection.SubscriberID);
-                            filteredRows = filteredRows.Where(row => lookup.HasRights(row.ConvertField<Guid>("SignalID")));
-                        }
-
-                        // Apply any maximum row count that user may have specified
-                        filteredRowList = filteredRows.Take(takeCount).ToList();
-
-                        if (filteredRowList.Count > 0)
-                        {
-                            DataTable metadataTable = metadata.Tables[table.TableName];
-
-                            // Manually copy-in each row into table
-                            foreach (DataRow row in filteredRowList)
-                            {
-                                DataRow newRow = metadataTable.NewRow();
-
-                                // Copy each column of data in the current row
-                                for (int x = 0; x < table.Columns.Count; x++)
-                                {
-                                    newRow[x] = row[x];
-                                }
-
-                                metadataTable.Rows.Add(newRow);
-                            }
-                        }
-                    }
-                }
-
-                // TODO: Although protected against unprovided tables and columns, this post-analysis operation is schema specific. This may need to be moved to an external function and executed via delegate to allow this kind of work for other schemas.
-
-                // Do some post analysis on the meta-data to be delivered to the client, e.g., if a device exists with no associated measurements - don't send the device.
-                if (metadata.Tables.Contains("MeasurementDetail") && metadata.Tables["MeasurementDetail"].Columns.Contains("DeviceAcronym") && metadata.Tables.Contains("DeviceDetail") && metadata.Tables["DeviceDetail"].Columns.Contains("Acronym"))
-                {
-                    List<DataRow> rowsToRemove = new List<DataRow>();
-                    string deviceAcronym;
-                    int? phasorSourceIndex;
-
-                    // Remove device records where no associated measurements records exist
-                    foreach (DataRow row in metadata.Tables["DeviceDetail"].Rows)
-                    {
-                        deviceAcronym = row["Acronym"].ToNonNullString();
-
-                        if (!string.IsNullOrEmpty(deviceAcronym) && (int)metadata.Tables["MeasurementDetail"].Compute("Count(DeviceAcronym)", $"DeviceAcronym = '{deviceAcronym}'") == 0)
-                            rowsToRemove.Add(row);
-                    }
-
-                    if (metadata.Tables.Contains("PhasorDetail") && metadata.Tables["PhasorDetail"].Columns.Contains("DeviceAcronym"))
-                    {
-                        // Remove phasor records where no associated device records exist
-                        foreach (DataRow row in metadata.Tables["PhasorDetail"].Rows)
-                        {
-                            deviceAcronym = row["DeviceAcronym"].ToNonNullString();
-
-                            if (!string.IsNullOrEmpty(deviceAcronym) && (int)metadata.Tables["DeviceDetail"].Compute("Count(Acronym)", $"Acronym = '{deviceAcronym}'") == 0)
-                                rowsToRemove.Add(row);
-                        }
-
-                        if (metadata.Tables["PhasorDetail"].Columns.Contains("SourceIndex") && metadata.Tables["MeasurementDetail"].Columns.Contains("PhasorSourceIndex"))
-                        {
-                            // Remove measurement records where no associated phasor records exist
-                            foreach (DataRow row in metadata.Tables["MeasurementDetail"].Rows)
-                            {
-                                deviceAcronym = row["DeviceAcronym"].ToNonNullString();
-                                phasorSourceIndex = row.ConvertField<int?>("PhasorSourceIndex");
-
-                                if (!string.IsNullOrEmpty(deviceAcronym) && (object)phasorSourceIndex != null && (int)metadata.Tables["PhasorDetail"].Compute("Count(DeviceAcronym)", $"DeviceAcronym = '{deviceAcronym}' AND SourceIndex = {phasorSourceIndex}") == 0)
-                                    rowsToRemove.Add(row);
-                            }
-                        }
-                    }
-
-                    // Remove any unnecessary rows
-                    foreach (DataRow row in rowsToRemove)
-                        row.Delete();
-
-                }
-
-                return metadata;
-            }
+            return null;
         }
 
         // Handles meta-data refresh request
@@ -2180,7 +2025,7 @@ namespace sttp.transport
                         foreach (string expression in expressions)
                         {
                             // Attempt to parse filter expression and add it dictionary if successful
-                            if (AdapterBase.ParseFilterExpression(expression, out string tableName, out string filterExpression, out string sortField, out int takeCount))
+                            if (FilterExpressionParser.ParseFilterExpression(expression, out string tableName, out string filterExpression, out string sortField, out int takeCount))
                                 filterExpressions.Add(tableName, Tuple.Create(filterExpression, sortField, takeCount));
                         }
                     }
@@ -2262,7 +2107,7 @@ namespace sttp.transport
                 operationalModes = BigEndian.ToUInt32(buffer, startIndex);
 
                 if ((operationalModes & (uint)OperationalModes.VersionMask) != 1u)
-                    OnStatusMessage(MessageLevel.Warning, $"Protocol version not supported. Operational modes may not be set correctly for client {connection.ClientID}.", flags: MessageFlags.UsageIssue);
+                    OnStatusMessage(MessageLevel.Warning, $"Protocol version not supported. Operational modes may not be set correctly for client {connection.ClientID}.");
 
                 connection.OperationalModes = (OperationalModes)operationalModes;
             }
@@ -2501,7 +2346,7 @@ namespace sttp.transport
                     if (!m_clientConnections.TryGetValue(clientID, out SubscriberConnection connection))
                     {
                         // Received a request from an unknown client, this request is denied
-                        OnStatusMessage(MessageLevel.Warning, $"Ignored {length} byte {(validServerCommand ? command.ToString() : "unidentified")} command request received from an unrecognized client: {clientID}", flags: MessageFlags.UsageIssue);
+                        OnStatusMessage(MessageLevel.Warning, $"Ignored {length} byte {(validServerCommand ? command.ToString() : "unidentified")} command request received from an unrecognized client: {clientID}");
                     }
                     else if (validServerCommand)
                     {

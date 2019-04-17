@@ -21,6 +21,11 @@
 //
 //******************************************************************************************************
 
+using sttp.communication;
+using sttp.security;
+using sttp.threading;
+using sttp.transport.tssc;
+using sttp.units;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -34,14 +39,9 @@ using System.Text;
 using System.Threading;
 using System.Timers;
 using System.Xml;
-using sttp.communication;
-using sttp.security;
-using sttp.threading;
-using sttp.transport.tssc;
-using sttp.units;
 using TcpClient = sttp.communication.TcpClient;
-using UdpClient = sttp.communication.UdpClient;
 using Timer = System.Timers.Timer;
+using UdpClient = sttp.communication.UdpClient;
 
 #pragma warning disable 672
 
@@ -118,11 +118,6 @@ namespace sttp.transport
         /// Defines the default value for the <see cref="UseTransactionForMetadata"/> property.
         /// </summary>
         public const bool DefaultUseTransactionForMetadata = true;
-
-        /// <summary>
-        /// Default value for <see cref="gggingPath"/>.
-        /// </summary>
-        public const string DefaultLoggingPath = "ConfigurationCache";
 
         /// <summary>
         /// Specifies the default value for the <see cref="AllowedParsingExceptions"/> property.
@@ -252,7 +247,6 @@ namespace sttp.transport
         private DateTime m_lastMetaDataRefreshTime;
         private OperationalModes m_operationalModes;
         private Encoding m_encoding;
-        private string m_loggingPath;
         private int m_parsingExceptionCount;
         private long m_lastParsingExceptionTime;
         private int m_allowedParsingExceptions;
@@ -264,8 +258,6 @@ namespace sttp.transport
         private uint m_expectedBufferBlockSequenceNumber;
 
         private Ticks m_realTime;
-        private Ticks m_lastStatisticsHelperUpdate;
-        private Timer m_subscribedDevicesTimer;
 
         private long m_lifetimeMeasurements;
         private long m_minimumMeasurementsPerSecond;
@@ -306,11 +298,6 @@ namespace sttp.transport
             m_allowedParsingExceptions = DefaultAllowedParsingExceptions;
             m_parsingExceptionWindow = DefaultParsingExceptionWindow;
 
-            string loggingPath = FilePath.GetDirectoryName(FilePath.GetAbsolutePath(DefaultLoggingPath));
-
-            if (Directory.Exists(loggingPath))
-                m_loggingPath = loggingPath;
-
             DataLossInterval = 10.0D;
 
             m_bufferBlockCache = new List<BufferBlockMeasurement>();
@@ -329,32 +316,6 @@ namespace sttp.transport
         {
             get => m_securityMode;
             set => m_securityMode = value;
-        }
-
-        /// <summary>
-        /// Gets or sets logging path to be used to be runtime and outage logs of the subscriber which are required for
-        /// automated data recovery.
-        /// </summary>
-        /// <remarks>
-        /// Leave value blank for default path, i.e., installation folder. Can be a fully qualified path or a path that
-        /// is relative to the installation folder, e.g., a value of "ConfigurationCache" might resolve to
-        /// "C:\Program Files\MyTimeSeriespPp\ConfigurationCache\".
-        /// </remarks>
-        public string LoggingPath
-        {
-            get => m_loggingPath;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    string loggingPath = FilePath.GetDirectoryName(FilePath.GetAbsolutePath(value));
-
-                    if (Directory.Exists(loggingPath))
-                        value = loggingPath;
-                }
-
-                m_loggingPath = value;
-            }
         }
 
         /// <summary>
@@ -645,7 +606,7 @@ namespace sttp.transport
         /// (2) only enabled in the end-most system that most needs the recovered data, like a historian.
         /// </para>
         /// </remarks>
-        public override bool SupportsTemporalProcessing => m_supportsTemporalProcessing;
+        public  bool SupportsTemporalProcessing => m_supportsTemporalProcessing;
 
         /// <summary>
         /// Gets or sets the desired processing interval, in milliseconds, for the adapter.
@@ -715,13 +676,12 @@ namespace sttp.transport
         /// <summary>
         /// Gets or sets <see cref="DataSet"/> based data source available to this <see cref="DataSubscriber"/>.
         /// </summary>
-        public override DataSet DataSource
+        public  DataSet DataSource
         {
             get => base.DataSource;
             set
             {
                 base.DataSource = value;
-                m_registerStatisticsOperation.RunOnce();
 
                 bool outputMeasurementsUpdated = AutoConnect && UpdateOutputMeasurements();
 
@@ -734,28 +694,6 @@ namespace sttp.transport
                     // Updating subscription will restart data stream monitor upon successful resubscribe
                     if (AutoStart)
                         SubscribeToOutputMeasurements(true);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Gets or sets output measurement keys that are requested by other adapters based on what adapter says it can provide.
-        /// </summary>
-        public override MeasurementKey[] RequestedOutputMeasurementKeys
-        {
-            get => base.RequestedOutputMeasurementKeys;
-            set
-            {
-                MeasurementKey[] oldKeys = base.RequestedOutputMeasurementKeys ?? new MeasurementKey[0];
-                MeasurementKey[] newKeys = value ?? new MeasurementKey[0];
-                HashSet<MeasurementKey> oldKeySet = new HashSet<MeasurementKey>(oldKeys);
-
-                base.RequestedOutputMeasurementKeys = value;
-
-                if (!AutoStart && Enabled && CommandChannelConnected && !oldKeySet.SetEquals(newKeys))
-                {
-                    OnStatusMessage(MessageLevel.Info, "Requested measurements have changed, adjusting active subscription...");
-                    SubscribeToOutputMeasurements(true);
                 }
             }
         }
@@ -789,7 +727,7 @@ namespace sttp.transport
         /// <remarks>
         /// Derived classes should provide current status information about the adapter for display purposes.
         /// </remarks>
-        public override string Status
+        public  string Status
         {
             get
             {
@@ -809,8 +747,6 @@ namespace sttp.transport
                     status.AppendLine();
                 }
                 status.AppendFormat("      Data monitor enabled: {0}", (object)m_dataStreamMonitor != null && m_dataStreamMonitor.Enabled);
-                status.AppendLine();
-                status.AppendFormat("              Logging path: {0}", FilePath.TrimFileName(m_loggingPath.ToNonNullNorWhiteSpace(FilePath.GetAbsolutePath("")), 51));
                 status.AppendLine();
 
                 if (DataLossInterval > 0.0D)
@@ -845,7 +781,7 @@ namespace sttp.transport
         /// <summary>
         /// Gets a flag that determines if this <see cref="DataSubscriber"/> uses an asynchronous connection.
         /// </summary>
-        protected override bool UseAsyncConnect => true;
+        protected  bool UseAsyncConnect => true;
 
         /// <summary>
         /// Gets or sets reference to <see cref="UdpClient"/> data channel, attaching and/or detaching to events as needed.
@@ -882,7 +818,7 @@ namespace sttp.transport
         }
 
         /// <summary>
-        /// Gets or sets reference to <see cref="Communication.TcpClient"/> command channel, attaching and/or detaching to events as needed.
+        /// Gets or sets reference to <see cref="TcpClient"/> command channel, attaching and/or detaching to events as needed.
         /// </summary>
         protected IClient CommandChannel
         {
@@ -987,7 +923,7 @@ namespace sttp.transport
         /// Releases the unmanaged resources used by the <see cref="DataSubscriber"/> object and optionally releases the managed resources.
         /// </summary>
         /// <param name="disposing">true to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
-        protected override void Dispose(bool disposing)
+        protected  void Dispose(bool disposing)
         {
             if (!m_disposed)
             {
@@ -998,13 +934,6 @@ namespace sttp.transport
                         DataLossInterval = 0.0D;
                         CommandChannel = null;
                         DataChannel = null;
-
-                        if ((object)m_subscribedDevicesTimer != null)
-                        {
-                            m_subscribedDevicesTimer.Elapsed -= SubscribedDevicesTimer_Elapsed;
-                            m_subscribedDevicesTimer.Dispose();
-                            m_subscribedDevicesTimer = null;
-                        }
                     }
                 }
                 finally
@@ -1018,7 +947,7 @@ namespace sttp.transport
         /// <summary>
         /// Initializes <see cref="DataSubscriber"/>.
         /// </summary>
-        public override void Initialize()
+        public  void Initialize()
         {
             //base.Initialize();
 
@@ -1137,15 +1066,6 @@ namespace sttp.transport
                 // Connect to local events when automatically engaging connection cycle
                 ConnectionAuthenticated += DataSubscriber_ConnectionAuthenticated;
                 MetaDataReceived += DataSubscriber_MetaDataReceived;
-
-                // Update output measurements to include "subscribed" points
-                UpdateOutputMeasurements(true);
-            }
-            else if (m_autoSynchronizeMetadata)
-            {
-                // Output measurements do not include "subscribed" points,
-                // but should still be filtered if applicable
-                TryFilterOutputMeasurements();
             }
 
             if (m_securityMode == SecurityMode.TLS)
@@ -1203,17 +1123,6 @@ namespace sttp.transport
                 OperationalModes |= OperationalModes.CompressPayloadData | OperationalModes.CompressMetadata | OperationalModes.CompressSignalIndexCache;
             }
 
-            // Get logging path, if any has been defined
-            if (settings.TryGetValue("loggingPath", out setting))
-            {
-                setting = FilePath.GetDirectoryName(FilePath.GetAbsolutePath(setting));
-
-                if (Directory.Exists(setting))
-                    m_loggingPath = setting;
-                else
-                    OnStatusMessage(MessageLevel.Info, $"Logging path \"{setting}\" not found, defaulting to \"{FilePath.GetAbsolutePath("")}\"...", flags: MessageFlags.UsageIssue);
-            }
-
             if (PersistConnectionForMetadata)
                 m_commandChannel.ConnectAsync();
 
@@ -1223,137 +1132,38 @@ namespace sttp.transport
         // Gets the path to the local certificate from the configuration file
         private string GetLocalCertificate()
         {
-            CategorizedSettingsElement localCertificateElement = ConfigurationFile.Current.Settings["systemSettings"]["LocalCertificate"];
-            string localCertificate = null;
+            //CategorizedSettingsElement localCertificateElement = ConfigurationFile.Current.Settings["systemSettings"]["LocalCertificate"];
+            //string localCertificate = null;
 
-            if ((object)localCertificateElement != null)
-                localCertificate = localCertificateElement.Value;
+            //if ((object)localCertificateElement != null)
+            //    localCertificate = localCertificateElement.Value;
 
-            if ((object)localCertificate == null || !File.Exists(FilePath.GetAbsolutePath(localCertificate)))
-                throw new InvalidOperationException("Unable to find local certificate. Local certificate file must exist when using TLS security mode.");
+            //if ((object)localCertificate == null || !File.Exists(FilePath.GetAbsolutePath(localCertificate)))
+            //    throw new InvalidOperationException("Unable to find local certificate. Local certificate file must exist when using TLS security mode.");
 
-            return localCertificate;
+            return null;
         }
 
         // Checks if the specified certificate exists
         private bool RemoteCertificateExists()
         {
             string fullPath = FilePath.GetAbsolutePath(m_remoteCertificate);
-            CategorizedSettingsElement remoteCertificateElement;
+            //CategorizedSettingsElement remoteCertificateElement;
 
-            if (!File.Exists(fullPath))
-            {
-                remoteCertificateElement = ConfigurationFile.Current.Settings["systemSettings"]["RemoteCertificatesPath"];
+            //if (!File.Exists(fullPath))
+            //{
+            //    remoteCertificateElement = ConfigurationFile.Current.Settings["systemSettings"]["RemoteCertificatesPath"];
 
-                if ((object)remoteCertificateElement != null)
-                {
-                    m_remoteCertificate = Path.Combine(remoteCertificateElement.Value, m_remoteCertificate);
-                    fullPath = FilePath.GetAbsolutePath(m_remoteCertificate);
-                }
-            }
+            //    if ((object)remoteCertificateElement != null)
+            //    {
+            //        m_remoteCertificate = Path.Combine(remoteCertificateElement.Value, m_remoteCertificate);
+            //        fullPath = FilePath.GetAbsolutePath(m_remoteCertificate);
+            //    }
+            //}
 
             return File.Exists(fullPath);
         }
-
-        // Initialize (or reinitialize) the output measurements associated with the data subscriber.
-        // Returns true if output measurements were updated, otherwise false if they remain the same.
-        private bool UpdateOutputMeasurements(bool initialCall = false)
-        {
-            IMeasurement[] originalOutputMeasurements = OutputMeasurements;
-
-            // Reapply output measurements if reinitializing - this way filter expressions and/or sourceIDs
-            // will be reapplied. This can be important after a meta-data refresh which may have added new
-            // measurements that could now be applicable as desired output measurements.
-            if (!initialCall)
-            {
-                if (Settings.TryGetValue("outputMeasurements", out string setting))
-                    OutputMeasurements = ParseOutputMeasurements(DataSource, true, setting);
-
-                OutputSourceIDs = OutputSourceIDs;
-            }
-
-            // If active measurements are defined, attempt to defined desired subscription points from there
-            if (m_filterOutputMeasurements && (object)DataSource != null && DataSource.Tables.Contains("ActiveMeasurements"))
-            {
-                try
-                {
-                    // Filter to points associated with this subscriber that have been requested for subscription, are enabled and not owned locally
-                    DataRow[] filteredRows = DataSource.Tables["ActiveMeasurements"].Select("Subscribed <> 0");
-                    List<IMeasurement> subscribedMeasurements = new List<IMeasurement>();
-                    Guid signalID;
-
-                    foreach (DataRow row in filteredRows)
-                    {
-                        // Create a new measurement for the provided field level information
-                        Measurement measurement = new Measurement();
-
-                        // Parse primary measurement identifier
-                        signalID = row["SignalID"].ToNonNullString(Guid.Empty.ToString()).ConvertToType<Guid>();
-
-                        // Set measurement key if defined
-                        MeasurementKey key = MeasurementKey.LookUpOrCreate(signalID, row["ID"].ToString());
-                        measurement.Metadata = key.Metadata;
-                        subscribedMeasurements.Add(measurement);
-                    }
-
-                    if (subscribedMeasurements.Count > 0)
-                    {
-                        // Combine subscribed output measurement with any existing output measurement and return unique set
-                        if ((object)OutputMeasurements == null)
-                            OutputMeasurements = subscribedMeasurements.ToArray();
-                        else
-                            OutputMeasurements = subscribedMeasurements.Concat(OutputMeasurements).Distinct().ToArray();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Errors here may not be catastrophic, this simply limits the auto-assignment of input measurement keys desired for subscription
-                    OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Failed to apply subscribed measurements to subscription filter: {ex.Message}", ex));
-                }
-            }
-
-            // Ensure that we are not attempting to subscribe to
-            // measurements that we know cannot be published
-            TryFilterOutputMeasurements();
-
-            // Determine if output measurements have changed
-            return originalOutputMeasurements.CompareTo(OutputMeasurements, false) != 0;
-        }
-
-        // When synchronizing meta-data, the publisher sends meta-data for all possible signals we can subscribe to.
-        // Here we check each signal defined in OutputMeasurements to determine whether that signal was defined in
-        // the published meta-data rather than blindly attempting to subscribe to all signals.
-        private void TryFilterOutputMeasurements()
-        {
-            if (!m_filterOutputMeasurements)
-                return;
-
-            IEnumerable<Guid> measurementIDs;
-            ISet<Guid> measurementIDSet;
-            Guid signalID = Guid.Empty;
-
-            try
-            {
-                if ((object)OutputMeasurements != null && (object)DataSource != null && DataSource.Tables.Contains("ActiveMeasurements"))
-                {
-                    // Have to use a Convert expression for DeviceID column in Select function
-                    // here since SQLite doesn't report data types for COALESCE based columns
-                    measurementIDs = DataSource.Tables["ActiveMeasurements"]
-                        .Select($"Convert(DeviceID, 'System.String') = '{ID}'")
-                        .Where(row => Guid.TryParse(row["SignalID"].ToNonNullString(), out signalID))
-                        .Select(row => signalID);
-
-                    measurementIDSet = new HashSet<Guid>(measurementIDs);
-
-                    OutputMeasurements = OutputMeasurements.Where(measurement => measurementIDSet.Contains(measurement.ID)).ToArray();
-                }
-            }
-            catch (Exception ex)
-            {
-                OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Error when filtering output measurements by device ID: {ex.Message}", ex));
-            }
-        }
-
+        
         /// <summary>
         /// Subscribes (or re-subscribes) to a data publisher for a set of data points.
         /// </summary>
@@ -1712,7 +1522,7 @@ namespace sttp.transport
                         // Write length of command buffer into command packet
                         int dataLength = data?.Length ?? 0;
                         byte[] lengthBytes = BigEndian.GetBytes(dataLength);
-                        commandPacket.Write(lengthBytes);
+                        commandPacket.Write(lengthBytes, 0, 4);
 
                         // Write command buffer into command packet
                         if (dataLength > 0)
@@ -1739,15 +1549,13 @@ namespace sttp.transport
         /// <summary>
         /// Attempts to connect to this <see cref="DataSubscriber"/>.
         /// </summary>
-        protected override void AttemptConnection()
+        protected  void AttemptConnection()
         {
             if (!this.TemporalConstraintIsDefined() && !m_supportsRealTimeProcessing)
                 return;
 
             long now = m_useLocalClockAsRealTime ? DateTime.UtcNow.Ticks : 0L;
-            List<DeviceStatisticsHelper<SubscribedDevice>> statisticsHelpers = m_statisticsHelpers;
 
-            m_registerStatisticsOperation.RunOnceAsync();
             m_expectedBufferBlockSequenceNumber = 0u;
             m_commandChannelConnectionAttempts = 0;
             m_dataChannelConnectionAttempts = 0;
@@ -1769,34 +1577,13 @@ namespace sttp.transport
 
             if (PersistConnectionForMetadata && CommandChannelConnected)
                 SubscribeToOutputMeasurements(true);
-
-            if (m_useLocalClockAsRealTime && (object)m_subscribedDevicesTimer == null)
-            {
-                m_subscribedDevicesTimer = new Timer(1000);
-                m_subscribedDevicesTimer.Elapsed += SubscribedDevicesTimer_Elapsed;
-            }
-
-            if ((object)statisticsHelpers != null)
-            {
-                m_realTime = 0L;
-                m_lastStatisticsHelperUpdate = 0L;
-
-                foreach (DeviceStatisticsHelper<SubscribedDevice> statisticsHelper in statisticsHelpers)
-                    statisticsHelper.Reset(now);
-            }
-
-            if (m_useLocalClockAsRealTime)
-                m_subscribedDevicesTimer.Start();
         }
 
         /// <summary>
         /// Attempts to disconnect from this <see cref="DataSubscriber"/>.
         /// </summary>
-        protected override void AttemptDisconnection()
+        protected  void AttemptDisconnection()
         {
-            // Unregister device statistics
-            m_registerStatisticsOperation.RunOnceAsync();
-
             // Stop data stream monitor
             if ((object)m_dataStreamMonitor != null)
                 m_dataStreamMonitor.Enabled = false;
@@ -1804,9 +1591,6 @@ namespace sttp.transport
             // Disconnect command channel
             if (!PersistConnectionForMetadata && (object)m_commandChannel != null)
                 m_commandChannel.Disconnect();
-
-            if ((object)m_subscribedDevicesTimer != null)
-                m_subscribedDevicesTimer.Stop();
 
             m_metadataRefreshPending = false;
         }
@@ -1816,10 +1600,10 @@ namespace sttp.transport
         /// </summary>
         /// <param name="maxLength">Maximum length of the status message.</param>
         /// <returns>Text of the status message.</returns>
-        public override string GetShortStatus(int maxLength)
+        public  string GetShortStatus(int maxLength)
         {
             if ((object)m_commandChannel != null && m_commandChannel.CurrentState == ClientState.Connected)
-                return $"Subscriber is connected and receiving data points".CenterText(maxLength);
+                return "Subscriber is connected and receiving data points".CenterText(maxLength);
 
             return "Subscriber is not connected.".CenterText(maxLength);
         }
@@ -1867,9 +1651,6 @@ namespace sttp.transport
             {
                 try
                 {
-                    Dictionary<Guid, DeviceStatisticsHelper<SubscribedDevice>> subscribedDevicesLookup;
-                    DeviceStatisticsHelper<SubscribedDevice> statisticsHelper;
-
                     ServerResponse responseCode = (ServerResponse)buffer[0];
                     ServerCommand commandCode = (ServerCommand)buffer[1];
                     int responseLength = BigEndian.ToInt32(buffer, 2);
@@ -1986,10 +1767,11 @@ namespace sttp.transport
                                 {
                                     if (!compactMeasurementFormat)
                                     {
+                                        // TODO: Fail early with not supported
                                         // Deserialize full measurement format
-                                        SerializableMeasurement measurement = new SerializableMeasurement(m_encoding);
-                                        responseIndex += measurement.ParseBinaryImage(buffer, responseIndex, responseLength - responseIndex);
-                                        measurements.Add(measurement);
+                                        //SerializableMeasurement measurement = new SerializableMeasurement(m_encoding);
+                                        //responseIndex += measurement.ParseBinaryImage(buffer, responseIndex, responseLength - responseIndex);
+                                        //measurements.Add(measurement);
                                     }
                                     else if ((object)m_signalIndexCache != null)
                                     {
@@ -2014,105 +1796,7 @@ namespace sttp.transport
                                 }
                             }
 
-                            // Calculate statistics
-                            subscribedDevicesLookup = m_subscribedDevicesLookup;
-                            statisticsHelper = null;
-
-                            if ((object)subscribedDevicesLookup != null)
-                            {
-                                IEnumerable<IGrouping<DeviceStatisticsHelper<SubscribedDevice>, IMeasurement>> deviceGroups = measurements
-                                    .Where(measurement => subscribedDevicesLookup.TryGetValue(measurement.ID, out statisticsHelper))
-                                    .Select(measurement => Tuple.Create(statisticsHelper, measurement))
-                                    .ToList()
-                                    .GroupBy(tuple => tuple.Item1, tuple => tuple.Item2);
-
-                                foreach (IGrouping<DeviceStatisticsHelper<SubscribedDevice>, IMeasurement> deviceGroup in deviceGroups)
-                                {
-                                    statisticsHelper = deviceGroup.Key;
-
-                                    foreach (IGrouping<Ticks, IMeasurement> frame in deviceGroup.GroupBy(measurement => measurement.Timestamp))
-                                    {
-                                        // Determine the number of measurements received with valid values
-                                        const MeasurementStateFlags ErrorFlags = MeasurementStateFlags.BadData | MeasurementStateFlags.BadTime | MeasurementStateFlags.SystemError;
-                                        Func<MeasurementStateFlags, bool> hasError = stateFlags => (stateFlags & ErrorFlags) != MeasurementStateFlags.Normal;
-                                        int measurementsReceived = frame.Count(measurement => !double.IsNaN(measurement.Value));
-                                        int measurementsWithError = frame.Count(measurement => !double.IsNaN(measurement.Value) && hasError(measurement.StateFlags));
-
-                                        IMeasurement statusFlags = null;
-                                        IMeasurement frequency = null;
-                                        IMeasurement deltaFrequency = null;
-
-                                        // Attempt to update real-time
-                                        if (!m_useLocalClockAsRealTime && frame.Key > m_realTime)
-                                            m_realTime = frame.Key;
-
-                                        // Search the frame for status flags, frequency, and delta frequency
-                                        foreach (IMeasurement measurement in frame)
-                                        {
-                                            if (measurement.ID == statisticsHelper.Device.StatusFlagsID)
-                                                statusFlags = measurement;
-                                            else if (measurement.ID == statisticsHelper.Device.FrequencyID)
-                                                frequency = measurement;
-                                            else if (measurement.ID == statisticsHelper.Device.DeltaFrequencyID)
-                                                deltaFrequency = measurement;
-                                        }
-
-                                        // If we are receiving status flags for this device,
-                                        // count the data quality, time quality, and device errors
-                                        if ((object)statusFlags != null)
-                                        {
-                                            uint commonStatusFlags = (uint)statusFlags.Value;
-
-                                            if ((commonStatusFlags & (uint)Bits.Bit19) > 0)
-                                                statisticsHelper.Device.DataQualityErrors++;
-
-                                            if ((commonStatusFlags & (uint)Bits.Bit18) > 0)
-                                                statisticsHelper.Device.TimeQualityErrors++;
-
-                                            if ((commonStatusFlags & (uint)Bits.Bit16) > 0)
-                                                statisticsHelper.Device.DeviceErrors++;
-
-                                            measurementsReceived--;
-
-                                            if (hasError(statusFlags.StateFlags))
-                                                measurementsWithError--;
-                                        }
-
-                                        // Zero is not a valid value for frequency.
-                                        // If frequency is zero, invalidate both frequency and delta frequency
-                                        if ((object)frequency != null && frequency.Value == 0.0D)
-                                        {
-                                            if ((object)deltaFrequency != null && !double.IsNaN(deltaFrequency.Value))
-                                                measurementsReceived -= 2;
-                                            else
-                                                measurementsReceived--;
-
-                                            if (hasError(frequency.StateFlags))
-                                            {
-                                                if ((object)deltaFrequency != null && !double.IsNaN(deltaFrequency.Value))
-                                                    measurementsWithError -= 2;
-                                                else
-                                                    measurementsWithError--;
-                                            }
-                                        }
-
-                                        // Track the number of measurements received
-                                        statisticsHelper.AddToMeasurementsReceived(measurementsReceived);
-                                        statisticsHelper.AddToMeasurementsWithError(measurementsWithError);
-                                    }
-                                }
-                            }
-
                             OnNewMeasurements(measurements);
-
-                            // Gather statistics on received data
-                            DateTime timeReceived = RealTime;
-
-                            if (!m_useLocalClockAsRealTime && timeReceived.Ticks - m_lastStatisticsHelperUpdate > Ticks.PerSecond)
-                            {
-                                UpdateStatisticsHelpers();
-                                m_lastStatisticsHelperUpdate = m_realTime;
-                            }
 
                             m_lifetimeMeasurements += measurements.Count;
                             UpdateMeasurementsPerSecond(timeReceived, measurements.Count);
@@ -2214,7 +1898,6 @@ namespace sttp.transport
                             // Deserialize new signal index cache
                             m_remoteSignalIndexCache = DeserializeSignalIndexCache(buffer.BlockCopy(responseIndex, responseLength));
                             m_signalIndexCache = new SignalIndexCache(DataSource, m_remoteSignalIndexCache);
-                            FixExpectedMeasurementCounts();
                             break;
                         case ServerResponse.UpdateBaseTimes:
                             // Get active time index
@@ -2341,10 +2024,6 @@ namespace sttp.transport
                 if (!m_tsscResetRequested)
                     throw new Exception($"TSSC is out of sequence. Expecting: {m_tsscSequenceNumber}, Received: {sequenceNumber}");
 
-                // Ignore packets until the reset has occurred.
-                LogEventPublisher publisher = Log.RegisterEvent(MessageLevel.Debug, "TSSC", 0, MessageRate.EveryFewSeconds(1), 5);
-                publisher.ShouldRaiseMessageSupressionNotifications = false;
-                publisher.Publish($"TSSC is out of sequence. Expecting: {m_tsscSequenceNumber}, Received: {sequenceNumber}");
                 return;
             }
 
@@ -2943,19 +2622,6 @@ namespace sttp.transport
             }
         }
 
-        /// <summary>
-        /// Gets file path for any defined logging path.
-        /// </summary>
-        /// <param name="filePath">Path to acquire within logging path.</param>
-        /// <returns>File path within any defined logging path.</returns>
-        protected string GetLoggingPath(string filePath)
-        {
-            if (string.IsNullOrWhiteSpace(m_loggingPath))
-                return FilePath.GetAbsolutePath(filePath);
-
-            return Path.Combine(m_loggingPath, filePath);
-        }
-
         protected internal virtual void OnStatusMessage(MessageLevel level, string status, string eventName = null)
         {
             // TODO: Raise event
@@ -2985,7 +2651,7 @@ namespace sttp.transport
                 }
                 catch (Exception ex)
                 {
-                    base.OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Error while restarting subscriber connection due to excessive exceptions: {ex.Message}", ex), "DataSubscriber", MessageFlags.UsageIssue);
+                    OnProcessException(MessageLevel.Warning, new InvalidOperationException($"Error while restarting subscriber connection due to excessive exceptions: {ex.Message}", ex), "DataSubscriber");
                 }
                 finally
                 {

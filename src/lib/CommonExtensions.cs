@@ -22,11 +22,24 @@
 //******************************************************************************************************
 
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Data;
+using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 
 namespace sttp
 {
+    /// <summary>
+    /// This class is used internally do define a standard buffer size.
+    /// </summary>
+    internal static class Standard
+    {
+        public const int BufferSize = 262144; // 256K
+    }
+
     /// <summary>
     /// Defines extension functions related to <see cref="Array"/> manipulation.
     /// </summary>
@@ -111,6 +124,70 @@ namespace sttp
                 Array.Copy(array, startIndex, copiedBytes, 0, copiedBytes.Length);
 
             return copiedBytes;
+        }
+
+        /// <summary>Compares two arrays.</summary>
+        /// <param name="array1">The first type array to compare to.</param>
+        /// <param name="array2">The second type array to compare against.</param>
+        /// <param name="orderIsImportant"><c>true</c> if order of elements should be considered for equality; otherwise, <c>false</c>.</param>
+        /// <returns>An <see cref="int"/> which returns 0 if they are equal, 1 if <paramref name="array1"/> is larger, or -1 if <paramref name="array2"/> is larger.</returns>
+        /// <typeparam name="TSource">The generic type of the array.</typeparam>
+        /// <exception cref="ArgumentException">Cannot compare multidimensional arrays.</exception>
+        public static int CompareTo<TSource>(this TSource[] array1, TSource[] array2, bool orderIsImportant = true)
+        {
+            return CompareTo(array1, array2, Comparer<TSource>.Default, orderIsImportant);
+        }
+
+        /// <summary>Compares two arrays.</summary>
+        /// <param name="array1">The first <see cref="Array"/> to compare to.</param>
+        /// <param name="array2">The second <see cref="Array"/> to compare against.</param>
+        /// <param name="comparer">An interface <see cref="IComparer"/> that exposes a method to compare the two arrays.</param>
+        /// <param name="orderIsImportant"><c>true</c> if order of elements should be considered for equality; otherwise, <c>false</c>.</param>
+        /// <returns>An <see cref="int"/> which returns 0 if they are equal, 1 if <paramref name="array1"/> is larger, or -1 if <paramref name="array2"/> is larger.</returns>
+        /// <remarks>This is a default comparer to make arrays comparable.</remarks>
+        /// <exception cref="ArgumentException">Cannot compare multidimensional arrays.</exception>
+        private static int CompareTo(this Array array1, Array array2, IComparer comparer, bool orderIsImportant = true)
+        {
+            if ((object)comparer == null)
+                throw new ArgumentNullException(nameof(comparer));
+
+            if ((object)array1 == null && (object)array2 == null)
+                return 0;
+
+            if ((object)array1 == null)
+                return -1;
+
+            if ((object)array2 == null)
+                return 1;
+
+            if (array1.Rank != 1 || array2.Rank != 1)
+                throw new ArgumentException("Cannot compare multidimensional arrays");
+
+            // For arrays that do not have the same number of elements, the array with most elements
+            // is assumed to be larger.
+            if (array1.Length != array2.Length)
+                return array1.Length.CompareTo(array2.Length);
+
+            if (!orderIsImportant)
+            {
+                array1 = array1.Cast<object>().ToArray();
+                array2 = array2.Cast<object>().ToArray();
+
+                Array.Sort(array1, comparer);
+                Array.Sort(array2, comparer);
+            }
+
+            int comparison = 0;
+
+            for (int x = 0; x < array1.Length; x++)
+            {
+                comparison = comparer.Compare(array1.GetValue(x), array2.GetValue(x));
+
+                if (comparison != 0)
+                    break;
+            }
+
+            return comparison;
         }
 
         /// <summary>
@@ -209,6 +286,112 @@ namespace sttp
                 return Enum.Parse(underlyingType, value.ToString());
 
             return Convert.ChangeType(value, underlyingType);
+        }
+
+        /// <summary>
+        /// Reads entire <see cref="Stream"/> contents, and returns <see cref="byte"/> array of data.
+        /// </summary>
+        /// <param name="source">The <see cref="Stream"/> to be converted to <see cref="byte"/> array.</param>
+        /// <returns>An array of <see cref="byte"/>.</returns>
+        public static byte[] ReadStream(this Stream source)
+        {
+            using (MemoryStream outStream = new MemoryStream())
+            {
+                source.CopyTo(outStream);
+                return outStream.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Returns a binary array of encrypted data for the given parameters.
+        /// </summary>
+        /// <param name="algorithm"><see cref="SymmetricAlgorithm"/> to use for encryption.</param>
+        /// <param name="data">Source buffer containing data to encrypt.</param>
+        /// <param name="startIndex">Offset into <paramref name="data"/> buffer.</param>
+        /// <param name="length">Number of bytes in <paramref name="data"/> buffer to encrypt starting from <paramref name="startIndex"/> offset.</param>
+        /// <param name="key">The secret key to use for the symmetric algorithm.</param>
+        /// <param name="iv">The initialization vector to use for the symmetric algorithm.</param>
+        /// <returns>Encrypted version of <paramref name="data"/> buffer.</returns>
+        public static byte[] Encrypt(this SymmetricAlgorithm algorithm, byte[] data, int startIndex, int length, byte[] key, byte[] iv)
+        {
+            // Fastest to use existing buffer in non-expandable memory stream for source and large block allocated memory stream for destination
+            using (MemoryStream source = new MemoryStream(data, startIndex, length))
+            using (MemoryStream destination = new MemoryStream())
+            {
+                algorithm.Encrypt(source, destination, key, iv);
+                return destination.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Encrypts input stream onto output stream for the given parameters.
+        /// </summary>
+        /// <param name="algorithm"><see cref="SymmetricAlgorithm"/> to use for encryption.</param>
+        /// <param name="source">Source stream that contains data to encrypt.</param>
+        /// <param name="destination">Destination stream used to hold encrypted data.</param>
+        /// <param name="key">The secret key to use for the symmetric algorithm.</param>
+        /// <param name="iv">The initialization vector to use for the symmetric algorithm.</param>
+        public static void Encrypt(this SymmetricAlgorithm algorithm, Stream source, Stream destination, byte[] key, byte[] iv)
+        {
+            byte[] buffer = new byte[Standard.BufferSize];
+            CryptoStream encodeStream = new CryptoStream(destination, algorithm.CreateEncryptor(key, iv), CryptoStreamMode.Write);
+
+            // Encrypts data onto output stream.
+            int read = source.Read(buffer, 0, Standard.BufferSize);
+
+            while (read > 0)
+            {
+                encodeStream.Write(buffer, 0, read);
+                read = source.Read(buffer, 0, Standard.BufferSize);
+            }
+
+            encodeStream.FlushFinalBlock();
+        }
+
+        /// <summary>
+        /// Returns a binary array of decrypted data for the given parameters.
+        /// </summary>
+        /// <param name="algorithm"><see cref="SymmetricAlgorithm"/> to use for decryption.</param>
+        /// <param name="data">Source buffer containing data to decrypt.</param>
+        /// <param name="startIndex">Offset into <paramref name="data"/> buffer.</param>
+        /// <param name="length">Number of bytes in <paramref name="data"/> buffer to decrypt starting from <paramref name="startIndex"/> offset.</param>
+        /// <param name="key">The secret key to use for the symmetric algorithm.</param>
+        /// <param name="iv">The initialization vector to use for the symmetric algorithm.</param>
+        /// <returns>Decrypted version of <paramref name="data"/> buffer.</returns>
+        public static byte[] Decrypt(this SymmetricAlgorithm algorithm, byte[] data, int startIndex, int length, byte[] key, byte[] iv)
+        {
+            // Fastest to use existing buffer in non-expandable memory stream for source and large block allocated memory stream for destination
+            using (MemoryStream source = new MemoryStream(data, startIndex, length))
+            using (MemoryStream destination = new MemoryStream())
+            {
+                algorithm.Decrypt(source, destination, key, iv);
+                return destination.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Decrypts input stream onto output stream for the given parameters.
+        /// </summary>
+        /// <param name="algorithm"><see cref="SymmetricAlgorithm"/> to use for decryption.</param>
+        /// <param name="source">Source stream that contains data to decrypt.</param>
+        /// <param name="destination">Destination stream used to hold decrypted data.</param>
+        /// <param name="key">The secret key to use for the symmetric algorithm.</param>
+        /// <param name="iv">The initialization vector to use for the symmetric algorithm.</param>
+        public static void Decrypt(this SymmetricAlgorithm algorithm, Stream source, Stream destination, byte[] key, byte[] iv)
+        {
+            byte[] buffer = new byte[Standard.BufferSize];
+            CryptoStream decodeStream = new CryptoStream(destination, algorithm.CreateDecryptor(key, iv), CryptoStreamMode.Write);
+
+            // Decrypts data onto output stream.
+            int read = source.Read(buffer, 0, Standard.BufferSize);
+
+            while (read > 0)
+            {
+                decodeStream.Write(buffer, 0, read);
+                read = source.Read(buffer, 0, Standard.BufferSize);
+            }
+
+            decodeStream.FlushFinalBlock();
         }
     }
 }
