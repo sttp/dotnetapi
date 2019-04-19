@@ -21,6 +21,7 @@
 //
 //******************************************************************************************************
 
+using sttp.communication;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -29,7 +30,6 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Timers;
-using sttp.communication;
 using Timer = System.Timers.Timer;
 
 namespace sttp.transport
@@ -362,9 +362,9 @@ namespace sttp.transport
 
                     settings.TryGetValue("source", out string source);
                     settings.TryGetValue("version", out string version);
-                    settings.TryGetValue("buildDate", out string buildDate);
+                    settings.TryGetValue("updatedOn", out string updatedOn);
 
-                    m_subscriberInfo = $"{source.ToNonNullNorWhiteSpace("unknown source")} version {version.ToNonNullNorWhiteSpace("?.?.?.?")} built on {buildDate.ToNonNullNorWhiteSpace("undefined date")}";
+                    m_subscriberInfo = $"{source.ToNonNullNorWhiteSpace("unknown source")} version {version.ToNonNullNorWhiteSpace("?.?.?.?")} updated on {updatedOn.ToNonNullNorWhiteSpace("undefined date")}";
                 }
             }
         }

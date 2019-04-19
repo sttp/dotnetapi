@@ -224,7 +224,6 @@ namespace sttp.transport
         private long m_lastMissingCacheWarning;
         private SecurityMode m_securityMode;
         private bool m_useMillisecondResolution;
-        private bool m_requestNaNValueFilter;
         private bool m_autoConnect;
         private string m_metadataFilters;
         private string m_localCertificate;
@@ -371,16 +370,6 @@ namespace sttp.transport
         {
             get => m_metadataFilters;
             set => m_metadataFilters = value;
-        }
-
-        /// <summary>
-        /// Gets or sets flag that informs publisher if base time-offsets can use millisecond resolution to conserve bandwidth.
-        /// </summary>
-        [Obsolete("SubscriptionInfo object defines this parameter.", false)]
-        public bool UseMillisecondResolution
-        {
-            get => m_useMillisecondResolution;
-            set => m_useMillisecondResolution = value;
         }
 
         /// <summary>
@@ -1013,14 +1002,6 @@ namespace sttp.transport
             if (settings.TryGetValue("useTransactionForMetadata", out setting))
                 m_useTransactionForMetadata = setting.ParseBoolean();
 
-            // Check if user wants to request that publisher use millisecond resolution to conserve bandwidth
-            if (settings.TryGetValue("useMillisecondResolution", out setting))
-                m_useMillisecondResolution = setting.ParseBoolean();
-
-            // Check if user wants to request that publisher remove NaN from the data stream to conserve bandwidth
-            if (settings.TryGetValue("requestNaNValueFilter", out setting))
-                m_requestNaNValueFilter = setting.ParseBoolean();
-
             // Check if user has defined any meta-data filter expressions
             if (settings.TryGetValue("metadataFilters", out setting))
                 m_metadataFilters = setting;
@@ -1171,57 +1152,37 @@ namespace sttp.transport
         /// <returns><c>true</c> if subscribe transmission was successful; otherwise <c>false</c>.</returns>
         public bool Subscribe(SubscriptionInfo info)
         {
-            StringBuilder connectionString = new StringBuilder();
-            AssemblyInfo assemblyInfo = AssemblyInfo.ExecutingAssembly;
-
-            connectionString.AppendFormat("trackLatestMeasurements={0};", info.Throttled);
-            connectionString.AppendFormat("publishInterval={0};", info.PublishInterval);
-            connectionString.AppendFormat("includeTime={0};", info.IncludeTime);
-            connectionString.AppendFormat("lagTime={0};", info.LagTime);
-            connectionString.AppendFormat("leadTime={0};", info.LeadTime);
-            connectionString.AppendFormat("useLocalClockAsRealTime={0};", info.UseLocalClockAsRealTime);
-            connectionString.AppendFormat("processingInterval={0};", info.ProcessingInterval);
-            connectionString.AppendFormat("useMillisecondResolution={0};", info.UseMillisecondResolution);
-            connectionString.AppendFormat("requestNaNValueFilter={0};", info.RequestNaNValueFilter);
-            connectionString.AppendFormat("assemblyInfo={{source={0};version={1}.{2}.{3};buildDate={4}}};", assemblyInfo.Name, assemblyInfo.Version.Major, assemblyInfo.Version.Minor, assemblyInfo.Version.Build, assemblyInfo.BuildDate.ToString("yyyy-MM-dd HH:mm:ss"));
-
-            if (!string.IsNullOrWhiteSpace(info.FilterExpression))
-                connectionString.AppendFormat("inputMeasurementKeys={{{0}}};", info.FilterExpression);
+            string dataChannel = null;
 
             if (info.UdpDataChannel)
-                connectionString.AppendFormat("dataChannel={{localport={0}}};", info.DataChannelLocalPort);
+                dataChannel = $"localport={info.DataChannelLocalPort}";
 
-            if (!string.IsNullOrWhiteSpace(info.StartTime))
-                connectionString.AppendFormat("startTimeConstraint={0};", info.StartTime);
-
-            if (!string.IsNullOrWhiteSpace(info.StopTime))
-                connectionString.AppendFormat("stopTimeConstraint={0};", info.StopTime);
-
-            if (!string.IsNullOrWhiteSpace(info.ConstraintParameters))
-                connectionString.AppendFormat("timeConstraintParameters={0};", info.ConstraintParameters);
-
-            if (!string.IsNullOrWhiteSpace(info.ExtraConnectionStringParameters))
-                connectionString.AppendFormat("{0};", info.ExtraConnectionStringParameters);
-
-            // Make sure not to monitor for data loss any faster than down-sample time on throttled connections - additionally
-            // you will want to make sure data stream monitor is twice lag-time to allow time for initial points to arrive.
-            if (info.Throttled && (object)m_dataStreamMonitor != null && m_dataStreamMonitor.Interval / 1000.0D < info.LagTime)
-                m_dataStreamMonitor.Interval = (int)(2.0D * info.LagTime * 1000.0D);
-
-            // Set millisecond resolution member variable for compact measurement parsing
-            m_useMillisecondResolution = info.UseMillisecondResolution;
-
-            return Subscribe(info.UseCompactMeasurementFormat, connectionString.ToString());
+            return Subscribe(
+                info.Throttled,
+                info.FilterExpression, 
+                dataChannel, 
+                info.IncludeTime,
+                info.PublishInterval,
+                info.LagTime, 
+                info.LeadTime, 
+                info.UseLocalClockAsRealTime, 
+                info.StartTime, 
+                info.StopTime, 
+                info.ConstraintParameters, 
+                info.ProcessingInterval,
+                info.UseMillisecondResolution,
+                info.RequestNaNValueFilter,
+                info.ExtraConnectionStringParameters);
         }
 
         /// <summary>
         /// Subscribes (or re-subscribes) to a data publisher for an unsynchronized set of data points.
         /// </summary>
-        /// <param name="compactFormat">Boolean value that determines if the compact measurement format should be used. Set to <c>false</c> for full fidelity measurement serialization; otherwise set to <c>true</c> for bandwidth conservation.</param>
         /// <param name="throttled">Boolean value that determines if data should be throttled at a set transmission interval or sent on change.</param>
         /// <param name="filterExpression">Filtering expression that defines the measurements that are being subscribed.</param>
         /// <param name="dataChannel">Desired UDP return data channel connection string to use for data packet transmission. Set to <c>null</c> to use TCP channel for data transmission.</param>
         /// <param name="includeTime">Boolean value that determines if time is a necessary component in streaming data.</param>
+        /// <param name="publishInterval">Defines the interval, in seconds, at which data should be published when using a throttled subscription.</param>
         /// <param name="lagTime">When <paramref name="throttled"/> is <c>true</c>, defines the data transmission speed in seconds (can be sub-second).</param>
         /// <param name="leadTime">When <paramref name="throttled"/> is <c>true</c>, defines the allowed time deviation tolerance to real-time in seconds (can be sub-second).</param>
         /// <param name="useLocalClockAsRealTime">When <paramref name="throttled"/> is <c>true</c>, defines boolean value that determines whether or not to use the local clock time as real-time. Set to <c>false</c> to use latest received measurement timestamp as real-time.</param>
@@ -1229,8 +1190,9 @@ namespace sttp.transport
         /// <param name="stopTime">Defines a relative or exact stop time for the temporal constraint to use for historical playback.</param>
         /// <param name="constraintParameters">Defines any temporal parameters related to the constraint to use for historical playback.</param>
         /// <param name="processingInterval">Defines the desired processing interval milliseconds, i.e., historical play back speed, to use when temporal constraints are defined.</param>
-        /// <param name="waitHandleNames">Comma separated list of wait handle names used to establish external event wait handles needed for inter-adapter synchronization.</param>
-        /// <param name="waitHandleTimeout">Maximum wait time for external events, in milliseconds, before proceeding.</param>
+        /// <param name="useMillisecondResolution">Defines flag to use millisecond resolution to reduce bandwidth when using compact format.</param>
+        /// <param name="requestNaNValueFilter">Defines flag to request NaN value filtering, if publisher allows it.</param>
+        /// <param name="extraConnectionStringParameters">Extra connection string parameters to include.</param>
         /// <returns><c>true</c> if subscribe transmission was successful; otherwise <c>false</c>.</returns>
         /// <remarks>
         /// <para>
@@ -1278,16 +1240,16 @@ namespace sttp.transport
         /// </list>
         /// </para>
         /// </remarks>
-        [Obsolete("Preferred method uses SubscriptionInfo object to subscribe.", false)]
-        public virtual bool Subscribe(bool compactFormat, bool throttled, string filterExpression, string dataChannel = null, bool includeTime = true, double lagTime = 10.0D, double leadTime = 5.0D, bool useLocalClockAsRealTime = false, string startTime = null, string stopTime = null, string constraintParameters = null, int processingInterval = -1, string waitHandleNames = null, int waitHandleTimeout = 0)
+        public virtual bool Subscribe(bool throttled, string filterExpression, string dataChannel = null, bool includeTime = true, double publishInterval = 1.0, double lagTime = 10.0D, double leadTime = 5.0D, bool useLocalClockAsRealTime = false, string startTime = null, string stopTime = null, string constraintParameters = null, int processingInterval = -1, bool useMillisecondResolution = false, bool requestNaNValueFilter = false, string extraConnectionStringParameters = null)
         {
             StringBuilder connectionString = new StringBuilder();
             AssemblyInfo assemblyInfo = AssemblyInfo.ExecutingAssembly;
 
-            connectionString.AppendFormat("trackLatestMeasurements={0}; ", throttled);
-            connectionString.AppendFormat("inputMeasurementKeys={{{0}}}; ", filterExpression.ToNonNullString());
+            connectionString.AppendFormat("throttled={0}; ", throttled);
+            connectionString.AppendFormat("filterExpression={{{0}}}; ", filterExpression.ToNonNullString());
             connectionString.AppendFormat("dataChannel={{{0}}}; ", dataChannel.ToNonNullString());
             connectionString.AppendFormat("includeTime={0}; ", includeTime);
+            connectionString.AppendFormat("publishInterval={0}; ", publishInterval);
             connectionString.AppendFormat("lagTime={0}; ", lagTime);
             connectionString.AppendFormat("leadTime={0}; ", leadTime);
             connectionString.AppendFormat("useLocalClockAsRealTime={0}; ", useLocalClockAsRealTime);
@@ -1295,31 +1257,27 @@ namespace sttp.transport
             connectionString.AppendFormat("stopTimeConstraint={0}; ", stopTime.ToNonNullString());
             connectionString.AppendFormat("timeConstraintParameters={0}; ", constraintParameters.ToNonNullString());
             connectionString.AppendFormat("processingInterval={0}; ", processingInterval);
-            connectionString.AppendFormat("useMillisecondResolution={0}; ", m_useMillisecondResolution);
-            connectionString.AppendFormat("requestNaNValueFilter={0}; ", m_requestNaNValueFilter);
-            connectionString.AppendFormat("assemblyInfo={{source={0}; version={1}.{2}.{3}; buildDate={4}}}", assemblyInfo.Name, assemblyInfo.Version.Major, assemblyInfo.Version.Minor, assemblyInfo.Version.Build, assemblyInfo.BuildDate.ToString("yyyy-MM-dd HH:mm:ss"));
+            connectionString.AppendFormat("useMillisecondResolution={0}; ", useMillisecondResolution);
+            connectionString.AppendFormat("requestNaNValueFilter={0}; ", requestNaNValueFilter);
+            connectionString.AppendFormat("assemblyInfo={{source=STTP .NET Library ({0}); version={1}.{2}.{3}; updatedOn={4:yyyy-MM-dd HH:mm:ss}}}", assemblyInfo.Name, assemblyInfo.Version.Major, assemblyInfo.Version.Minor, assemblyInfo.Version.Build, assemblyInfo.BuildDate);
 
-            if (!string.IsNullOrWhiteSpace(waitHandleNames))
-            {
-                connectionString.AppendFormat("; waitHandleNames={0}", waitHandleNames);
-                connectionString.AppendFormat("; waitHandleTimeout={0}", waitHandleTimeout);
-            }
+            if (!string.IsNullOrWhiteSpace(extraConnectionStringParameters))
+                connectionString.AppendFormat("; {0}", extraConnectionStringParameters);
 
             // Make sure not to monitor for data loss any faster than down-sample time on throttled connections - additionally
             // you will want to make sure data stream monitor is twice lag-time to allow time for initial points to arrive.
             if (throttled && (object)m_dataStreamMonitor != null && m_dataStreamMonitor.Interval / 1000.0D < lagTime)
                 m_dataStreamMonitor.Interval = (int)(2.0D * lagTime * 1000.0D);
 
-            return Subscribe(compactFormat, connectionString.ToString());
+            return Subscribe(connectionString.ToString());
         }
 
         /// <summary>
         /// Subscribes (or re-subscribes) to a data publisher for a set of data points.
         /// </summary>
-        /// <param name="compactFormat">Boolean value that determines if the compact measurement format should be used. Set to <c>false</c> for full fidelity measurement serialization; otherwise set to <c>true</c> for bandwidth conservation.</param>
         /// <param name="connectionString">Connection string that defines required and optional parameters for the subscription.</param>
         /// <returns><c>true</c> if subscribe transmission was successful; otherwise <c>false</c>.</returns>
-        public virtual bool Subscribe(bool compactFormat, string connectionString)
+        public virtual bool Subscribe(string connectionString)
         {
             bool success = false;
 
@@ -1331,11 +1289,17 @@ namespace sttp.transport
                     Dictionary<string, string> settings = connectionString.ParseKeyValuePairs();
                     UdpClient dataChannel = null;
 
-                    // Track specified time inclusion for later deserialization
+                    // Track specified time inclusion value for later deserialization
                     if (settings.TryGetValue("includeTime", out string setting))
                         m_includeTime = setting.ParseBoolean();
                     else
                         m_includeTime = true;
+
+                    // Track specified use millisecond resolution value for later deserialization
+                    if (settings.TryGetValue("useMillisecondResolution", out setting))
+                        m_useMillisecondResolution = setting.ParseBoolean();
+                    else
+                        m_useMillisecondResolution = false;
 
                     settings.TryGetValue("dataChannel", out setting);
 
@@ -1366,7 +1330,7 @@ namespace sttp.transport
                         DataPacketFlags flags = DataPacketFlags.NoFlags;
                         byte[] bytes;
 
-                        if (compactFormat)
+                        if ((CompressionModes & CompressionModes.TSSC) == 0)
                             flags |= DataPacketFlags.Compact;
 
                         // Write data packet flags into buffer
