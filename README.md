@@ -1,2 +1,2 @@
-# dotnetapi-s
-.NET API for STTP (Standalone)
+# dotnetapi
+.NET API for STTP
