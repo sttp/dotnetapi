@@ -1,5 +1,5 @@
 ﻿//******************************************************************************************************
-//  DataSubscriber.cs - Gbtc
+//  DataPublisher.cs - Gbtc
 //
 //  Copyright © 2022, Grid Protection Alliance.  All Rights Reserved.
 //
@@ -16,7 +16,7 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  09/15/2022 - J. Ritchie Carroll
+//  09/16/2022 - Ritchie Carroll
 //       Generated original version of source code.
 //
 //******************************************************************************************************
@@ -24,8 +24,8 @@
 namespace sttp.transport;
 
 /// <summary>
-/// Represents a subscription for an STTP connection.
+/// Represents a publisher for an STTP connection.
 /// </summary>
-public class DataSubscriber
+public class DataPublisher
 {
 }
