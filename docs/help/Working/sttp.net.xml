@@ -1,0 +1,1114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<doc>
+  <assembly>
+    <name>sttp.net</name>
+  </assembly>
+  <members>
+    <member name="T:sttp.Config">
+      <summary>
+            Defines the STTP connection related configuration parameters.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.MaxRetries">
+      <summary>
+            Gets or sets the maximum number of times to retry a connection.
+            Set value to -1 to retry infinitely.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.RetryInterval">
+      <summary>
+            Gets or sets the base retry interval, in seconds. Retries will exponentially
+            back-off starting from this interval.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.MaxRetryInterval">
+      <summary>
+            Gets or sets the maximum retry interval, in seconds.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.AutoReconnect">
+      <summary>
+            Gets or sets flag that determines if connections should be automatically
+            reattempted.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.AutoRequestMetadata">
+      <summary>
+            Gets or sets flag that determines if metadata should be automatically requested
+            upon successful connection.
+            </summary>
+      <remarks>
+            When <c>true</c>, metadata will be requested upon connection before subscription;
+            otherwise, any metadata operations must be handled manually.
+            </remarks>
+    </member>
+    <member name="P:sttp.Config.AutoSubscribe">
+      <summary>
+            Gets or sets flag that determines if subscription should be handled automatically
+            upon successful connection.
+            </summary>
+      <remarks>
+            When <see cref="P:sttp.Config.AutoRequestMetadata" /> is <c>true</c> and <see cref="P:sttp.Config.AutoSubscribe" />
+            is <c>true</c>, subscription will occur after reception of metadata. When
+            <see cref="P:sttp.Config.AutoRequestMetadata" /> is <c>false</c> and <see cref="P:sttp.Config.AutoSubscribe" /> is
+            <c>true</c>, subscription will occur at successful connection. When
+            <see cref="P:sttp.Config.AutoSubscribe" /> is <c>false</c>, any subscribe operations must be handled
+            manually.
+            </remarks>
+    </member>
+    <member name="P:sttp.Config.CompressPayloadData">
+      <summary>
+            Gets or sets flag that determines whether payload data is compressed.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.CompressMetadata">
+      <summary>
+            Gets or sets flag that determines whether the metadata transfer is compressed.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.CompressSignalIndexCache">
+      <summary>
+            Gets or sets flag that determines whether the signal index cache is compressed.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.MetadataFilters">
+      <summary>
+            Gets or sets any filters to be applied to incoming metadata to reduce total received
+            metadata. Each filter expression should be separated by semi-colon.
+            </summary>
+    </member>
+    <member name="P:sttp.Config.Version">
+      <summary>
+            Gets or sets the target STTP protocol version. This currently defaults to 2.
+            </summary>
+    </member>
+    <member name="T:sttp.Reader">
+      <summary>
+            Defines an STTP measurement reader.
+            </summary>
+    </member>
+    <member name="T:sttp.Settings">
+      <summary>
+            Defines the STTP subscription related settings.
+            </summary>
+      <remarks>
+            The <see cref="T:sttp.Settings" /> class exists as a simplified implementation of the
+            <see cref="!:SubscriptionInfo" /> class found in the <see cref="N:sttp.transport" /> namespace.
+            Internally, the <see cref="T:sttp.Subscriber" /> class maps <see cref="T:sttp.Settings" /> values to
+            a <see cref="!:SubscriptionInfo" /> instance for use with a <see cref="T:sttp.transport.DataSubscriber" />.
+            </remarks>
+    </member>
+    <member name="P:sttp.Settings.Throttled">
+      <summary>
+            Gets or sets flag that setermines if data will be published using down-sampling.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.PublishInterval">
+      <summary>
+            Gets or sets flag that defines the down-sampling publish interval, in seconds,
+            to use when <see cref="P:sttp.Settings.Throttled" /> is <c>true</c>. 
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.UDPDataChannelPort">
+      <summary>
+            Gets or sets the desired UDP port to use for publication. Zero value means do not
+            receive data on UDP, i.e., data will be delivered to the STTP client via TCP.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.UDPDataChannelInterface">
+      <summary>
+            Gets or sets the desired UDP binding interface to use for publication. Empty string
+            means to bind to same interface as TCP command channel.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.IncludeTime">
+      <summary>
+            Gets or sets flag that determines if time should be included in non-compressed,
+            compact measurements.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.UseMillisecondResolution">
+      <summary>
+            Gets or sets flag that determines if time should be restricted to milliseconds
+            in non-compressed, compact measurements.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.RequestNaNValueFilter">
+      <summary>
+            Gets or sets flag that requests that the publisher filter, i.e., does not send,
+            any <c>NaN</c> values.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.StartTime">
+      <summary>
+            Gets or sets the start time for a requested temporal data playback, i.e., a historical
+            subscription. Simply by specifying a <see cref="P:sttp.Settings.StartTime" /> and <see cref="P:sttp.Settings.StopTime" />,
+            a subscription is considered a historical subscription.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.StopTime">
+      <summary>
+            Gets or sets the stop time for a requested temporal data playback, i.e., a historical
+            subscription. Simply by specifying a <see cref="P:sttp.Settings.StartTime" /> and <see cref="P:sttp.Settings.StopTime" />,
+            a subscription is considered a historical subscription.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.ConstraintParameters">
+      <summary>
+            Gets or sets any custom constraint parameters for a requested temporal data playback.
+            This can include parameters that may be needed to initiate, filter, or control
+            historical data access.
+            </summary>
+    </member>
+    <member name="P:sttp.Settings.ProcessingInterval">
+      <summary>
+            Gets or sets the initial playback speed, in milliseconds, for a requested temporal data
+            playback.
+            <remarks>
+            With the exception of the values of -1 and 0, this value specifies the desired processing
+            interval for data, i.e., basically a delay, or timer interval, over which to process data.
+            A value of -1 means to use the default processing interval while a value of 0 means to
+            process data as fast as possible.
+            </remarks></summary>
+    </member>
+    <member name="P:sttp.Settings.ExtraConnectionStringParameters">
+      <summary>
+            Gets or sets any extra custom connection string parameters that may be needed for a
+            subscription.
+            </summary>
+    </member>
+    <member name="T:sttp.Subscriber">
+      <summary>
+            Represents an STTP data subscriber.
+            </summary>
+      <remarks>
+            The <see cref="T:sttp.Subscriber" /> class exists as a simplified implementation of the
+            <see cref="!:DataSubscriber" /> class found in the <see cref="N:sttp.transport" /> namespace.
+            This class maintains an internal instance of the <see cref="!:DataSubscriber" />
+            class for subscription based functionality and is intended to simplify common uses
+            of STTP data reception.
+            </remarks>
+    </member>
+    <member name="T:sttp.transport.BufferBlock">
+      <summary>
+            BufferBlock defines an atomic unit of data, i.e., a binary buffer, for transport in STTP.
+            </summary>
+    </member>
+    <member name="P:sttp.transport.BufferBlock.SignalID">
+      <summary>
+            Defines measurement's globally unique identifier.
+            </summary>
+    </member>
+    <member name="P:sttp.transport.BufferBlock.Buffer">
+      <summary>
+            Gets measurement buffer as an atomic unit of data, i.e., a binary buffer.
+            </summary>
+      <remarks>
+            This buffer typically represents a partial image of a larger whole.
+            </remarks>
+    </member>
+    <member name="T:sttp.transport.Default">
+      <summary>
+            Measurement flag for a defaults for STTP settings.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.MaxRetries">
+      <summary>
+            Default for maximum number of retries for a connection attempt.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.RetryInterval">
+      <summary>
+            Default for retry interval, in seconds.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.MaxRetryInterval">
+      <summary>
+            Default for maximum retry interval, in seconds.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.AutoReconnect">
+      <summary>
+            Default for auto-reconnect flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.AutoRequestMetadata">
+      <summary>
+            Default for auto-request metadata flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.AutoSubscribe">
+      <summary>
+            Default for the auto-subscribe flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.CompressPayloadData">
+      <summary>
+            Default to the compress payload data flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.CompressMetadata">
+      <summary>
+            Default for the compress metadata flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.CompressSignalIndexCache">
+      <summary>
+            Default  for the compress signal index cache flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.MetadataFilters">
+      <summary>
+            Default for metadata filters
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.Version">
+      <summary>
+            Default for STTP protocol version.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.FilterExpression">
+      <summary>
+            Default for filter expression.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.Throttled">
+      <summary>
+            Default for throttled flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.PublishInterval">
+      <summary>
+            Default for publish interval, in seconds.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.EnableUDPDataChannel">
+      <summary>
+            Default for enable UDP data channel flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.UDPDataChannelPort">
+      <summary>
+            Default for local UDP port for data channel.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.UDPDataChannelInterface">
+      <summary>
+            Default for interface for UPD data channel.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.IncludeTime">
+      <summary>
+            Default for include time flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.UseMillisecondResolution">
+      <summary>
+            Default for use millisecond resolution flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.RequestNaNValueFilter">
+      <summary>
+            Default for request NAN-value filter flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.StartTime">
+      <summary>
+            Default for start time.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.StopTime">
+      <summary>
+            Default for stop time.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.ConstraintParameters">
+      <summary>
+            Default for constraint parameters.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.ProcessingInterval">
+      <summary>
+            Default  for processing interval, in seconds.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.Default.ExtraConnectionStringParameters">
+      <summary>
+            Default for extra connection string parameters.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.StateFlags">
+      <summary>
+            Enumeration of the possible quality states of a <see cref="!:Measurement" /> value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.Normal">
+      <summary>
+            Measurement flag for a normal state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.BadData">
+      <summary>
+            Measurement flag for a bad data state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.SuspectData">
+      <summary>
+            Measurement flag for a suspect data state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.OverRangeError">
+      <summary>
+            Measurement flag for an over range error, i.e., unreasonable high value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UnderRangeError">
+      <summary>
+            Measurement flag for an under range error, i.e., unreasonable low value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.AlarmHigh">
+      <summary>
+            Measurement flag for a alarm for high value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.AlarmLow">
+      <summary>
+            Measurement flag for an alarm for low value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.WarningHigh">
+      <summary>
+            Measurement flag for a warning for high value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.WarningLow">
+      <summary>
+            Measurement flag for a warning for low value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.FlatlineAlarm">
+      <summary>
+            Measurement flag for an alarm for flat-lined value, i.e., latched value test alarm.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.ComparisonAlarm">
+      <summary>
+            Measurement flag for a comparison alarm, i.e., outside threshold of comparison with a real-time value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.ROCAlarm">
+      <summary>
+            Measurement flag for a rate-of-change alarm.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.ReceivedAsBad">
+      <summary>
+            Measurement flag for a bad value received.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.CalculatedValue">
+      <summary>
+            Measurement flag for a calculated value state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.CalculationError">
+      <summary>
+            Measurement flag for a calculation error with the value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.CalculationWarning">
+      <summary>
+            Measurement flag for a calculation warning with the value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.ReservedQualityFlag">
+      <summary>
+            Measurement flag for a reserved quality flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.BadTime">
+      <summary>
+            Measurement flag for a bad time state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.SuspectTime">
+      <summary>
+            Measurement flag for a suspect time state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.LateTimeAlarm">
+      <summary>
+            Measurement flag for a late time alarm.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.FutureTimeAlarm">
+      <summary>
+            Measurement flag for a future time alarm.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UpSampled">
+      <summary>
+            Measurement flag for an up-sampled state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.DownSampled">
+      <summary>
+            Measurement flag for a down-sampled state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.DiscardedValue">
+      <summary>
+            Measurement flag for a discarded value state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.ReservedTimeFlag">
+      <summary>
+            Measurement flag for a reserved time flag.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UserDefinedFlag1">
+      <summary>
+            Measurement flag for a user defined flag 1.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UserDefinedFlag2">
+      <summary>
+            Measurement flag for a user defined flag 2.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UserDefinedFlag3">
+      <summary>
+            Measurement flag for a user defined flag 3.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UserDefinedFlag4">
+      <summary>
+            Measurement flag for a user defined flag 4.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.UserDefinedFlag5">
+      <summary>
+            Measurement flag for a user defined flag 5.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.SystemError">
+      <summary>
+            Measurement flag for a system error state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.SystemWarning">
+      <summary>
+            Measurement flag for a system warning state.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.StateFlags.MeasurementError">
+      <summary>
+            Measurement flag for an error state.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.DataPacketFlags">
+      <summary>
+            Enumeration of the possible flags for a data packet.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.DataPacketFlags.Compact">
+      <summary>
+            Determines if serialized measurement is compact. Currently this bit is always set.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.DataPacketFlags.CipherIndex">
+      <summary>
+            Determines which cipher index to use when encrypting data packet.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.DataPacketFlags.Compressed">
+      <summary>
+            Determines if data packet payload is compressed.
+            </summary>
+      <remarks>
+            Bit set = payload compressed, bit clear = payload normal.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.DataPacketFlags.CacheIndex">
+      <summary>
+            Determines which signal index cache to use when decoding a data packet. Used by STTP version 2 or greater.
+            </summary>
+      <remarks>
+            Bit set = use odd cache index (i.e., 1), bit clear = use even cache index (i.e., 0).
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.DataPacketFlags.NoFlags">
+      <summary>
+            Defines state where there are no flags set.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.ServerCommand">
+      <summary>
+            Enumeration of the possible server commands received by <see cref="T:sttp.transport.DataPublisher" /> and sent by <see cref="T:sttp.transport.DataSubscriber" />
+            during an STTP session.
+            </summary>
+      <remarks>
+            Solicited server commands will receive a <see cref="F:sttp.transport.ServerResponse.Succeeded" /> or <see cref="F:sttp.transport.ServerResponse.Failed" />
+            response code along with an associated success or failure message. Message type for successful responses will be based
+            on server command - for example, server response for a successful MetaDataRefresh command will return a serialized
+            <see cref="!:DataSet" /> of the available server metadata. Message type for failed responses will always be a string of
+            text representing the error message.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.Connect">
+      <summary>
+            Command code for handling connect operations.
+            </summary>
+      <remarks>
+            Only used as part of connection refused response -- value not sent on the wire.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.MetaDataRefresh">
+      <summary>
+            Command code for requesting an updated set of metadata.
+            </summary>
+      <remarks>
+            Successful return message type will be a <see cref="!:DataSet" /> containing server device and measurement metadata.
+            Devices and measurements contain unique Guids that should be used to key metadata updates in local repository.
+            Optional string based message can follow command that should represent client requested meta-data filtering
+            expressions, e.g.: "FILTER MeasurementDetail WHERE SignalType &lt;&gt; 'STAT'"
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.Subscribe">
+      <summary>
+            Command code for requesting a subscription of streaming data from server based on connection string that follows.
+            </summary>
+      <remarks>
+            It will not be necessary to stop an existing subscription before requesting a new one.
+            Successful return message type will be string indicating total number of allowed points.
+            Client should wait for UpdateSignalIndexCache and UpdateBaseTime response codes before attempting
+            to parse data when using the compact measurement format.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.Unsubscribe">
+      <summary>
+            Command code for requesting that server stop sending streaming data to the client and cancel the current subscription.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.RotateCipherKeys">
+      <summary>
+            Command code for manually requesting that server send a new set of cipher keys for data packet encryption (UDP only).
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UpdateProcessingInterval">
+      <summary>
+            Command code for manually requesting that server to update the processing interval with the following specified value.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.DefineOperationalModes">
+      <summary>
+            Command code for establishing operational modes.
+            </summary>
+      <remarks>
+            As soon as connection is established, requests that server set operational modes that affect how the subscriber and
+            publisher will communicate.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.ConfirmNotification">
+      <summary>
+            Command code for receipt of a notification.
+            </summary>
+      <remarks>
+            This message is sent in response to <see cref="F:sttp.transport.ServerResponse.Notify" />.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.ConfirmBufferBlock">
+      <summary>
+            Command code for receipt of a buffer block measurement.
+            </summary>
+      <remarks>
+            This message is sent in response to <see cref="F:sttp.transport.ServerResponse.BufferBlock" />.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.ConfirmUpdateBaseTimes">
+      <summary>
+            Command code for receipt of a base time update.
+            </summary>
+      <remarks>
+            This message is sent in response to <see cref="F:sttp.transport.ServerResponse.UpdateBaseTimes" />.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.ConfirmSignalIndexCache">
+      <summary>
+            Command code for confirming the receipt of a signal index cache.
+            </summary>
+      <remarks>
+            This allows publisher to safely transition to next signal index cache.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.GetPrimaryMetadataSchema">
+      <summary>
+            Command code for requesting the primary metadata schema.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.GetSignalSelectionSchema">
+      <summary>
+            Command code for requesting the signal selection schema.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand00">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand01">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand02">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand03">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand04">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand05">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand06">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand07">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand08">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand09">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand10">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand11">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand12">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand13">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand14">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerCommand.UserCommand15">
+      <summary>
+            Command code for handling user-defined commands.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.ServerResponse">
+      <summary>
+            Enumeration of the possible server responses sent by <see cref="T:sttp.transport.DataPublisher" /> and received by <see cref="T:sttp.transport.DataSubscriber" />
+            during an STTP session.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.Succeeded">
+      <summary>
+            Response code indicating a succeeded response.
+            </summary>
+      <remarks>
+            Informs client that its solicited server command succeeded, original command and success message follow.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.Failed">
+      <summary>
+            Response code indicating a failed response.
+            </summary>
+      <remarks>
+            Informs client that its solicited server command failed, original command and failure message follow.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.DataPacket">
+      <summary>
+            Response code indicating a data packet.
+            </summary>
+      <remarks>
+            Unsolicited response informs client that a data packet follows.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UpdateSignalIndexCache">
+      <summary>
+            Response code indicating a signal index cache update.
+            </summary>
+      <remarks>
+            Unsolicited response requests that client update its runtime signal index cache with the one that follows.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UpdateBaseTimes">
+      <summary>
+            Response code indicating a runtime base-timestamp offsets have been updated.
+            </summary>
+      <remarks>
+            Unsolicited response requests that client update its runtime base-timestamp offsets with those that follow.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UpdateCipherKeys">
+      <summary>
+            Response code indicating a runtime cipher keys have been updated.
+            </summary>
+      <remarks>
+            Response, solicited or unsolicited, requests that client update its runtime data cipher keys with those that follow.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.DataStartTime">
+      <summary>
+            Response code indicating the start time of data being published.
+            </summary>
+      <remarks>
+            Unsolicited response provides the start time of data being processed from the first measurement.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.ProcessingComplete">
+      <summary>
+            Response code indicating that processing has completed.
+            </summary>
+      <remarks>
+            Unsolicited response provides notification that input processing has completed, typically via temporal constraint.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.BufferBlock">
+      <summary>
+            Response code indicating a buffer block.
+            </summary>
+      <remarks>
+            Unsolicited response informs client that a raw buffer block follows.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.Notify">
+      <summary>
+            Response code indicating a notification.
+            </summary>
+      <remarks>
+            Unsolicited response provides a notification message to the client.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.ConfigurationChanged">
+      <summary>
+            Response code indicating a that the publisher configuration metadata has changed.
+            </summary>
+      <remarks>
+            Unsolicited response provides a notification that the publisher's source configuration has changed and that
+            client may want to request a meta-data refresh.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse00">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse01">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse02">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse03">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse04">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse05">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse06">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse07">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse08">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse09">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse10">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse11">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse12">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse13">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse14">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.UserResponse15">
+      <summary>
+            Response code handling user-defined responses.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ServerResponse.NoOP">
+      <summary>
+            Response code indicating a null-operation keep-alive ping.
+            </summary>
+      <remarks>
+            The command channel can remain quiet for some time, this command allows a period test of client connectivity.
+            </remarks>
+    </member>
+    <member name="T:sttp.transport.OperationalModes">
+      <summary>
+            Enumeration of the possible modes that affect how <see cref="T:sttp.transport.DataPublisher" /> and <see cref="T:sttp.transport.DataSubscriber" />
+            communicate during as STTP session.
+            </summary>
+      <remarks>
+            Operational modes are sent from a subscriber to a publisher to request operational behaviors for the
+            connection, as a result the operation modes must be sent before any other command. The publisher may
+            silently refuse some requests (e.g., compression) based on its configuration. Operational modes only
+            apply to fundamental protocol control.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.VersionMask">
+      <summary>
+            Bit mask used to get version number of protocol.
+            </summary>
+      <remarks>
+            Version number is currently set to 2.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.EncodingMask">
+      <summary>
+            Bit mask used to get character encoding used when exchanging messages between publisher and subscriber.
+             </summary>
+      <remarks>
+             STTP currently only supports UTF-8 string encoding.
+             </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.ImplementationSpecificExtensionMask">
+      <summary>
+            Bit mask used to apply an implementation-specific extension to STTP.
+            </summary>
+      <remarks>
+            If the value is zero, no implementation specific extensions are applied.
+            If the value is non-zero, an implementation specific extension is applied, and all parties need to coordinate and agree to the extension.
+            If extended flags are unsupported, returned failure message text should be prefixed with UNSUPPORTED EXTENSION: as the context reference.
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.ReceiveExternalMetadata">
+      <summary>
+            Bit flag used to determine whether external measurements are exchanged during metadata synchronization.
+            </summary>
+      <remarks>
+            Bit set = external measurements are exchanged, bit clear = no external measurements are exchanged
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.ReceiveInternalMetadata">
+      <summary>
+            Bit flag used to determine whether internal measurements are exchanged during metadata synchronization.
+            </summary>
+      <remarks>
+            Bit set = internal measurements are exchanged, bit clear = no internal measurements are exchanged
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.CompressPayloadData">
+      <summary>
+            Bit flag used to determine whether payload data is compressed when exchanging between publisher and subscriber.
+            </summary>
+      <remarks>
+            Bit set = compress, bit clear = no compression
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.CompressSignalIndexCache">
+      <summary>
+            Bit flag used to determine whether the signal index cache is compressed when exchanging between publisher and subscriber.
+            </summary>
+      <remarks>
+            Bit set = compress, bit clear = no compression
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.CompressMetadata">
+      <summary>
+            Bit flag used to determine whether metadata is compressed when exchanging between publisher and subscriber.
+            </summary>
+      <remarks>
+            Bit set = compress, bit clear = no compression
+            </remarks>
+    </member>
+    <member name="F:sttp.transport.OperationalModes.NoFlags">
+      <summary>
+            State where there are no flags set.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.OperationalEncoding">
+      <summary>
+            Enumeration of the possible string encoding options of an STTP session.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.OperationalEncoding.UTF16LE">
+      <summary>
+            Targets little-endian 16-bit Unicode character encoding for strings.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.OperationalEncoding.UTF16BE">
+      <summary>
+            Targets big-endian 16-bit Unicode character encoding for strings.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.OperationalEncoding.UTF8">
+      <summary>
+            Targets 8-bit variable-width Unicode character encoding for strings.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.CompressionModes">
+      <summary>
+            Enumeration of the possible compression modes supported by STTP.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.CompressionModes.GZip">
+      <summary>
+            Bit flag used determine if GZip compression will be used to metadata exchange.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.CompressionModes.TSSC">
+      <summary>
+            Bit flag used determine if the time-series special compression algorithm will be used for data exchange.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.CompressionModes.None">
+      <summary>
+            Defines state where no compression will be used.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.SecurityMode">
+      <summary>
+            Enumeration of the possible security modes used by the <see cref="T:sttp.transport.DataPublisher" /> to secure data
+            sent over the command channel in STTP.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.SecurityMode.Off">
+      <summary>
+            Defines security mode where data will be sent over the wire unencrypted.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.SecurityMode.TLS">
+      <summary>
+            Defines security mode where data will be sent over wire using Transport Layer Security (TLS).
+            </summary>
+    </member>
+    <member name="T:sttp.transport.ConnectStatus">
+      <summary>
+            Enumeration of the possible connection status results used by the <see cref="!:SubscriberConnector" />.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ConnectStatus.Success">
+      <summary>
+            Connection succeeded status.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ConnectStatus.Failed">
+      <summary>
+            Connection failed status.
+            </summary>
+    </member>
+    <member name="F:sttp.transport.ConnectStatus.Canceled">
+      <summary>
+            Connection cancelled status.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.DataPublisher">
+      <summary>
+            Represents a publisher for an STTP connection.
+            </summary>
+    </member>
+    <member name="T:sttp.transport.DataSubscriber">
+      <summary>
+            Represents a subscription for an STTP connection.
+            </summary>
+    </member>
+    <member name="T:sttp.Version">
+      <summary>
+            Defines STTP API Implementation Version ID Constants.
+            </summary>
+    </member>
+    <member name="F:sttp.Version.STTPSource">
+      <summary>
+            Defines the STTP library API title used for data subscriber identification.
+            </summary>
+    </member>
+    <member name="F:sttp.Version.STTPVersion">
+      <summary>
+            Defines the STTP library API version used for data subscriber identification.
+            </summary>
+    </member>
+    <member name="F:sttp.Version.STTPUpdatedOn">
+      <summary>
+            Defines when the STTP library API was last updated used for data subscriber identification.
+            </summary>
+    </member>
+    <member name="N:sttp">
+      <summary />
+    </member>
+    <member name="N:sttp.transport">
+      <summary />
+    </member>
+  </members>
+</doc>

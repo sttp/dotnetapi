@@ -1,0 +1,187 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Import the common properties to support NuGet restore -->
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <!-- A target framework version is required by Visual Studio.  It can be any version with a targeting pack installed. -->
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <!-- The configuration and platform will be used to determine which assemblies to include from solution and
+				 project documentation sources -->
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>fb840dde-6567-4372-9055-812ab723cd45</ProjectGuid>
+    <SHFBSchemaVersion>2017.9.26.0</SHFBSchemaVersion>
+    <!-- AssemblyName, Name, and RootNamespace are not used by SHFB but Visual Studio adds them anyway -->
+    <AssemblyName>docs</AssemblyName>
+    <RootNamespace>docs</RootNamespace>
+    <Name>docs</Name>
+    <!-- SHFB properties -->
+    <FrameworkVersion>.NET Core/.NET Standard/.NET 5.0+</FrameworkVersion>
+    <OutputPath>..\..\docs\help\</OutputPath>
+    <HtmlHelpName>.NET STTP API</HtmlHelpName>
+    <Language>en-US</Language>
+    <TransformComponentArguments>
+      <Argument Key="RobotsMetadata" Value="" />
+      <Argument Key="BibliographyDataFile" Value="" />
+      <Argument Key="LogoFile" Value="sttp.png" />
+      <Argument Key="LogoHeight" Value="" />
+      <Argument Key="LogoWidth" Value="" />
+      <Argument Key="LogoAltText" Value=".NET STTP API" />
+      <Argument Key="LogoPlacement" Value="right" />
+      <Argument Key="LogoAlignment" Value="left" />
+      <Argument Key="LogoUrl" Value="https://github.com/sttp/dotnetapi" />
+      <Argument Key="MaxVersionParts" Value="" />
+      <Argument Key="DefaultLanguage" Value="cs" />
+      <Argument Key="IncludeEnumValues" Value="True" />
+      <Argument Key="EnumMemberSortOrder" Value="Value" />
+      <Argument Key="FlagsEnumValueFormat" Value="IntegerValue" />
+      <Argument Key="FlagsEnumSeparatorSize" Value="0" />
+      <Argument Key="BaseSourceCodeUrl" Value="https://github.com/sttp/dotnetapi/tree/main/src/" />
+      <Argument Key="RequestExampleUrl" Value="https://github.com/sttp/dotnetapi/issues/new" />
+    </TransformComponentArguments>
+    <HelpFileFormat>Website</HelpFileFormat>
+    <SyntaxFilters>Standard</SyntaxFilters>
+    <PresentationStyle>VS2013</PresentationStyle>
+    <CleanIntermediates>True</CleanIntermediates>
+    <KeepLogFile>True</KeepLogFile>
+    <DisableCodeBlockComponent>False</DisableCodeBlockComponent>
+    <IndentHtml>False</IndentHtml>
+    <BuildAssemblerVerbosity>OnlyWarningsAndErrors</BuildAssemblerVerbosity>
+    <SaveComponentCacheCapacity>100</SaveComponentCacheCapacity>
+    <HelpTitle>.NET STTP API</HelpTitle>
+    <HelpFileVersion>1.0.0.0</HelpFileVersion>
+    <NamingMethod>MemberName</NamingMethod>
+    <ContentPlacement>AboveNamespaces</ContentPlacement>
+    <RootNamespaceContainer>False</RootNamespaceContainer>
+    <NamespaceGrouping>False</NamespaceGrouping>
+    <MaximumGroupParts>4</MaximumGroupParts>
+    <Preliminary>False</Preliminary>
+    <CopyrightHref>https://github.com/sttp/dotnetapi/blob/main/LICENSE</CopyrightHref>
+    <CopyrightText>Copyright &amp;#169%3b 2022 Grid Protection Alliance</CopyrightText>
+    <FeedbackEMailAddress>support%40gridprotectionalliance.org</FeedbackEMailAddress>
+    <FeedbackEMailLinkText>GPA Support</FeedbackEMailLinkText>
+    <SdkLinkTarget>Blank</SdkLinkTarget>
+    <VisibleItems>Attributes, InheritedMembers, InheritedFrameworkMembers, Protected, ProtectedInternalAsProtected, EditorBrowsableNever, NonBrowsable</VisibleItems>
+    <SourceCodeBasePath>..\</SourceCodeBasePath>
+    <WarnOnMissingSourceContext>False</WarnOnMissingSourceContext>
+    <ComponentConfigurations>
+      <ComponentConfig id="Syntax Component" enabled="True" xmlns="">
+        <component id="Syntax Component">
+          <syntax input="/document/reference" output="/document/syntax" renderReferenceLinks="true" />
+          <generators>
+    {@SyntaxFilters}
+</generators>
+          <containerElement name="codeSnippetGroup" addNoExampleTabs="true" includeOnSingleSnippets="false" groupingEnabled="{@CodeSnippetGrouping}" />
+          <configurations>
+            <generator id="C#" />
+            <generator id="Visual Basic">
+              <includeLineContinuation value="false" />
+            </generator>
+            <generator id="Visual Basic Usage">
+              <includeLineContinuation value="false" />
+            </generator>
+            <generator id="Managed C++" />
+            <generator id="F#" />
+            <generator id="J#" />
+            <generator id="JScript" />
+            <generator id="JavaScript" />
+            <generator id="XAML Usage" />
+            <generator id="ASP.NET" />
+            <generator id="X#" />
+          </configurations>
+        </component>
+      </ComponentConfig>
+      <ComponentConfig id="IntelliSense Component" enabled="True" xmlns="">
+        <component id="IntelliSense Component">
+          <output includeNamespaces="false" namespacesFile="Namespaces" folder="{@OutputFolder}" boundedCapacity="100" />
+        </component>
+      </ComponentConfig>
+    </ComponentConfigurations>
+    <PlugInConfigurations>
+    </PlugInConfigurations>
+    <FooterText>&amp;lt%3bspan class=&amp;quot%3bsite-footer-credits&amp;quot%3b&amp;gt%3b
+&amp;lt%3ba href=&amp;quot%3bhttps://sttp.github.io/dotnetapi/&amp;quot%3b target=&amp;quot%3b_self&amp;quot%3b&amp;gt%3bDocumentation Home&amp;lt%3b/a&amp;gt%3b &amp;#160%3b•&amp;#160%3b &amp;lt%3ba href=&amp;quot%3bhttps://www.nuget.org/packages/sttp.net/&amp;quot%3b target=&amp;quot%3b_blank&amp;quot%3b&amp;gt%3bSTTP Library on NuGet&amp;lt%3b/a&amp;gt%3b &amp;#160%3b•&amp;#160%3b &amp;lt%3ba href=&amp;quot%3bhttps://sttp.github.io/documentation/&amp;quot%3b target=&amp;quot%3b_blank&amp;quot%3b&amp;gt%3bGeneral STTP Documentation&amp;lt%3b/a&amp;gt%3b&amp;lt%3bbr/&amp;gt%3b&amp;lt%3bbr/&amp;gt%3b
+Generated by &amp;lt%3ba href=&amp;quot%3bhttps://github.com/EWSoftware/SHFB&amp;quot%3b target=&amp;quot%3b_blank&amp;quot%3b&amp;gt%3bSandcastle Help File Builder&amp;lt%3b/a&amp;gt%3b
+&amp;lt%3b/span&amp;gt%3b</FooterText>
+    <DocumentationSources>
+      <DocumentationSource sourceFile="..\sttp.net.csproj" xmlns="" />
+    </DocumentationSources>
+    <NamespaceSummaries>
+      <NamespaceSummaryItem name="sttp.transport" isDocumented="True" />
+      <NamespaceSummaryItem name="(global)" isDocumented="False" />
+    </NamespaceSummaries>
+    <RootNamespaceTitle>sttp</RootNamespaceTitle>
+    <CatalogProductId>VS</CatalogProductId>
+    <CatalogVersion>100</CatalogVersion>
+    <ProductTitle>
+    </ProductTitle>
+    <TocOrder>-1</TocOrder>
+    <TocParentId>-1</TocParentId>
+    <TocParentVersion>100</TocParentVersion>
+    <TopicVersion>100</TopicVersion>
+    <MSHelpViewerSdkLinkType>Msdn</MSHelpViewerSdkLinkType>
+  </PropertyGroup>
+  <!-- There are no properties for these groups.  AnyCPU needs to appear in order for Visual Studio to perform
+			 the build.  The others are optional common platform types that may appear. -->
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|Win32' ">
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|Win32' ">
+  </PropertyGroup>
+  <ItemGroup>
+    <Folder Include="Content" />
+    <Folder Include="icons" />
+    <Folder Include="media" />
+    <Folder Include="styles\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Content\About.aml" />
+    <None Include="icons\favicon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ContentLayout Include="layout.content" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="icons\Help.png" />
+    <Content Include="styles\branding.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="icons\gemstone-square-48.png">
+      <ImageId>gemstone-square-48</ImageId>
+      <AlternateText>gemstone-square-48</AlternateText>
+      <CopyToMedia>True</CopyToMedia>
+    </Content>
+    <Content Include="icons\sttp.png">
+      <ImageId>sttp</ImageId>
+      <AlternateText>sttp</AlternateText>
+      <CopyToMedia>False</CopyToMedia>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Tokens Include="common.tokens" />
+  </ItemGroup>
+  <!-- Import the common build targets during NuGet restore because before the packages are being installed, $(SHFBROOT) is not set yet -->
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="'$(MSBuildRestoreSessionId)' != ''" />
+  <!-- Import the SHFB build targets during build -->
+  <Import Project="$(SHFBROOT)\SandcastleHelpFileBuilder.targets" Condition="'$(MSBuildRestoreSessionId)' == ''" />
+  <!-- The pre-build and post-build event properties must appear *after* the targets file import in order to be
+			 evaluated correctly. -->
+  <PropertyGroup>
+    <PreBuildEvent>
+    </PreBuildEvent>
+    <PostBuildEvent>powershell -Command "Get-ChildItem -Path '$(OutputPath)html' | ForEach-Object { (Get-Content $_.FullName) -replace '&gt;.NET STTP API&lt;/a&gt;', '&gt;Content&lt;/a&gt;' | Set-Content -encoding UTF8 $_.FullName }"</PostBuildEvent>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+  </PropertyGroup>
+</Project>

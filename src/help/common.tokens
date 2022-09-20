@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<content xml:space="preserve" xmlns:ddue="http://ddue.schemas.microsoft.com/authoring/2003/5" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <item id="AboutSTTPSection"><ddue:section xmlns:ddue="http://ddue.schemas.microsoft.com/authoring/2003/5">
+      <ddue:title>About the .NET STTP API</ddue:title>
+      <ddue:content>
+        <ddue:para>
+          The 
+          <ddue:externalLink>
+            <ddue:linkText>.NET STTP API</ddue:linkText>
+            <ddue:linkAlternateText>.NET STTP API</ddue:linkAlternateText>
+            <ddue:linkUri>https://github.com/sttp/dotnetapi</ddue:linkUri>
+            <ddue:linkTarget>_blank</ddue:linkTarget>
+          </ddue:externalLink>, maintained by the 
+          <ddue:externalLink>
+            <ddue:linkText>Grid Protection Alliance</ddue:linkText>
+            <ddue:linkAlternateText>Grid Protection Alliance</ddue:linkAlternateText>
+            <ddue:linkUri>https://gridprotectionalliance.org/</ddue:linkUri>
+            <ddue:linkTarget>_blank</ddue:linkTarget>
+          </ddue:externalLink> (GPA), is a reference implementation of the STTP written in .NET. For other language implementations, see the main
+          <ddue:externalLink>
+            <ddue:linkText>STTP GitHub organizational site</ddue:linkText>
+            <ddue:linkAlternateText>STTP GitHub site</ddue:linkAlternateText>
+            <ddue:linkUri>https://github.com/sttp/</ddue:linkUri>
+            <ddue:linkTarget>_blank</ddue:linkTarget>
+          </ddue:externalLink>.
+        </ddue:para>
+        <ddue:para>
+          STTP is currently undergoing IEEE standardization (P2664), see:
+          <ddue:externalLink>
+            <ddue:linkText>https://standards.ieee.org/ieee/2664/7397/</ddue:linkText>
+            <ddue:linkAlternateText>https://standards.ieee.org/ieee/2664/7397/</ddue:linkAlternateText>
+            <ddue:linkUri>https://standards.ieee.org/ieee/2664/7397/</ddue:linkUri>
+            <ddue:linkTarget>_blank</ddue:linkTarget>
+          </ddue:externalLink>.
+        </ddue:para>
+        <ddue:para>
+          For general STTP documentation, see:
+          <ddue:externalLink>
+            <ddue:linkText>https://sttp.github.io/documentation/</ddue:linkText>
+            <ddue:linkAlternateText>https://sttp.github.io/documentation/</ddue:linkAlternateText>
+            <ddue:linkUri>https://sttp.github.io/documentation/</ddue:linkUri>
+            <ddue:linkTarget>_blank</ddue:linkTarget>
+          </ddue:externalLink>.
+        </ddue:para>
+      </ddue:content>
+    </ddue:section></item>
+  <item id="SHFB"><ddue:externalLink xmlns:ddue="http://ddue.schemas.microsoft.com/authoring/2003/5">
+    <ddue:linkText>Sandcastle Help File Builder</ddue:linkText>
+    <ddue:linkUri>https://GitHub.com/EWSoftware/SHFB</ddue:linkUri>
+</ddue:externalLink></item>
+</content>

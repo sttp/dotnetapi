@@ -7,3 +7,5 @@ The Streaming Telemetry Transport Protocol (STTP) is optimized for the demands o
 
 STTP is currently undergoing IEEE standardization (P2664), see: https://standards.ieee.org/ieee/2664/7397/
 
+### Documentation
+[Library Documentation](https://sttp.github.io/dotnetapi//help)

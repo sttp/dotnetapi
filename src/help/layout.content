@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Topics>
+  <Topic id="About" visible="True" isDefault="true" isSelected="true" apiParentMode="InsertAfter" title="About STTP" tocTitle="About" linkText="https://github.com/sttp/dotnetapi">
+    <HelpKeywords>
+      <HelpKeyword index="K" term="welcome, getting started, root, STTP" />
+    </HelpKeywords>
+  </Topic>
+</Topics>
