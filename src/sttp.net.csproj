@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="help\**" />
+    <EmbeddedResource Remove="help\**" />
+    <None Remove="help\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Gemstone.Common" Version="1.0.86" />
   </ItemGroup>
 
