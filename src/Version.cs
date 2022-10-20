@@ -41,5 +41,5 @@ public static class Version
     /// <summary>
     /// Defines when the STTP library API was last updated used for data subscriber identification.
     /// </summary>
-    public const string STTPUpdatedOn = "2022-09-25";
+    public const string STTPUpdatedOn = "2022-10-20";
 }

@@ -66,7 +66,8 @@ public static class Time
     /// <param name="timestamp">STTP uint64 timestamp.</param>
     /// <returns><see cref="Ticks"/> representing specified STTP <paramref name="timestamp"/>.</returns>
     /// <remarks>
-    /// <see cref="Ticks"/> value can be implicitly cast to and from standard .NET <see cref="DateTime"/>.
+    /// <see cref="Ticks"/> value can be implicitly cast to and from standard .NET <see cref="DateTime"/>
+    /// and <see cref="TimeSpan"/> instances.
     /// </remarks>
     public static Ticks ToTicks(ulong timestamp) => new((long)(timestamp & ValueMask));
 
@@ -78,7 +79,8 @@ public static class Time
     /// <param name="leapSecondIsNegative">Flag that determines if leap second is negative.</param>
     /// <returns>STTP uint64 timestamp representing specified <paramref name="ticks"/>.</returns>
     /// <remarks>
-    /// <see cref="Ticks"/> value can be implicitly cast to and from standard .NET <see cref="DateTime"/>.
+    /// <see cref="Ticks"/> value can be implicitly cast to and from standard .NET <see cref="DateTime"/>
+    /// and <see cref="TimeSpan"/> instances.
     /// </remarks>
     public static ulong FromTicks(Ticks ticks, bool leapSecond = false, bool leapSecondIsNegative = false)
     {

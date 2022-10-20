@@ -1,5 +1,5 @@
 ﻿//******************************************************************************************************
-//  Subscriber.cs - Gbtc
+//  MetadataCache.cs - Gbtc
 //
 //  Copyright © 2022, Grid Protection Alliance.  All Rights Reserved.
 //
@@ -16,30 +16,36 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  09/15/2022 - J. Ritchie Carroll
+//  10/19/2022 - rcarroll
 //       Generated original version of source code.
 //
 //******************************************************************************************************
 
-using sttp.transport;
+using sttp.metadata.record;
 
-namespace sttp;
-
-/// <summary>
-/// Represents an STTP data subscriber.
-/// </summary>
-/// <remarks>
-/// The <see cref="Subscriber"/> class exists as a simplified implementation of the
-/// <see cref="DataSubscriber"/> class found in the <c>transport</c> namespace.
-/// This class maintains an internal instance of the <see cref="DataSubscriber"/>
-/// class for subscription based functionality and is intended to simplify common uses
-/// of STTP data reception.
-/// </remarks>
-public class Subscriber
+namespace sttp.metadata
 {
-    // Configuration reference
-    private Config? m_config;
-    
-    
-    
+    /// <summary>
+    /// Represents a collection of parsed STTP metadata records.
+    /// </summary>
+    public class MetadataCache
+    {
+        /// <summary>
+        /// Finds the <see cref="MeasurementRecord"/> for the specified <paramref name="signalID"/> in the cache.
+        /// </summary>
+        /// <param name="signalID">Signal ID to lookup.</param>
+        /// <returns><see cref="MeasurementRecord"/> for specified <paramref name="signalID"/>.</returns>
+        public MeasurementRecord? FindMeasurement(Guid signalID)
+        {
+            return default;
+        }
+
+        /// <summary>
+        /// Adds specified <paramref name="record"/> to the cache.
+        /// </summary>
+        /// <param name="record">Measurment record to add.</param>
+        public void AddMeasurementRecord(MeasurementRecord record)
+        {
+        }
+    }
 }

@@ -1,5 +1,5 @@
 ﻿//******************************************************************************************************
-//  Subscriber.cs - Gbtc
+//  SubscriberConnector.cs - Gbtc
 //
 //  Copyright © 2022, Grid Protection Alliance.  All Rights Reserved.
 //
@@ -16,30 +16,32 @@
 //
 //  Code Modification History:
 //  ----------------------------------------------------------------------------------------------------
-//  09/15/2022 - J. Ritchie Carroll
+//  10/19/2022 - rcarroll
 //       Generated original version of source code.
 //
 //******************************************************************************************************
 
-using sttp.transport;
-
-namespace sttp;
-
-/// <summary>
-/// Represents an STTP data subscriber.
-/// </summary>
-/// <remarks>
-/// The <see cref="Subscriber"/> class exists as a simplified implementation of the
-/// <see cref="DataSubscriber"/> class found in the <c>transport</c> namespace.
-/// This class maintains an internal instance of the <see cref="DataSubscriber"/>
-/// class for subscription based functionality and is intended to simplify common uses
-/// of STTP data reception.
-/// </remarks>
-public class Subscriber
+namespace sttp.transport
 {
-    // Configuration reference
-    private Config? m_config;
-    
-    
-    
+    /// <summary>
+    /// Represents a connector that will establish or automatically reestablish a connection
+    /// from a <see cref="DataSubscriber"/> to a <see cref="DataPublisher"/>.
+    /// </summary>
+    public class SubscriberConnector
+    {
+        internal bool ConnectionRefused { get; set; }
+
+        /// <summary>
+        /// Cleanly shuts down a <see cref="SubscriberConnector"/> that is no longer being used, e.g., during a normal application exit.
+        /// </summary>
+        public void Dispose()
+        {
+            //m_disposing = true;
+        }
+
+        internal void ResetConnection()
+        {
+
+        }
+    }
 }

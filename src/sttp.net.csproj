@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Gemstone.Common" Version="1.0.86" />
+    <PackageReference Include="Gemstone.Numeric" Version="1.0.86" />
   </ItemGroup>
 
 </Project>
