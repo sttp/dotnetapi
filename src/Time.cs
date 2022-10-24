@@ -82,9 +82,13 @@ public static class Time
     /// <see cref="Ticks"/> value can be implicitly cast to and from standard .NET <see cref="DateTime"/>
     /// and <see cref="TimeSpan"/> instances.
     /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="leapSecond"/> must be true if <paramref name="leapSecondIsNegative"/> is true.</exception>
     public static ulong FromTicks(Ticks ticks, bool leapSecond = false, bool leapSecondIsNegative = false)
     {
         ulong timestamp = (ulong)ticks.Value;
+
+        if (!leapSecond && leapSecondIsNegative)
+            throw new ArgumentException($"{nameof(leapSecond)} must be true if {nameof(leapSecondIsNegative)} is true");
 
         if (leapSecond)
             timestamp |= LeapSecondFlag;
@@ -94,4 +98,19 @@ public static class Time
 
         return timestamp;
     }
+
+    /// <summary>
+    /// Gets flag that determines if <paramref name="timestamp"/> represents a leap second, i.e., second 60.
+    /// </summary>
+    /// <param name="timestamp">STTP uint64 timestamp.</param>
+    /// <returns>Flag that determines if <paramref name="timestamp"/> represents a leap second.</returns>
+    public static bool IsLeapSecond(ulong timestamp) => (timestamp & LeapSecondFlag) > 0;
+
+    /// <summary>
+    /// Gets flags that determines if <paramref name="timestamp"/> represents a negative leap second, i.e.,
+    /// checks flag on second 58 to see if second 59 will be missing.
+    /// </summary>
+    /// <param name="timestamp">STTP uint64 timestamp.</param>
+    /// <returns>Flag that determines if <paramref name="timestamp"/> represents a negative leap second.</returns>
+    public static bool IsNegativeLeapSecond(ulong timestamp) => IsLeapSecond(timestamp) && (timestamp & LeapSecondDirection) > 0;
 }    
