@@ -35,6 +35,7 @@ public static class Version
 
     /// <summary>
     /// Defines the STTP library API version used for data subscriber identification.
+    /// Note: This is not the STTP protocol version, but the version of the STTP library API.
     /// </summary>
     public const string STTPVersion = "0.1.0";
 
