@@ -43,5 +43,10 @@ namespace sttp.transport
         {
 
         }
+
+        internal void Cancel()
+        {
+            
+        }
     }
 }

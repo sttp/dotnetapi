@@ -265,15 +265,17 @@ public class DataSubscriber
     /// If the metadata does not exist, a new record is created and returned.
     /// </summary>
     /// <param name="signalID">Signal ID to lookup.</param>
+    /// <param name="source">STTP source instance, from measurement key.</param>
+    /// <param name="id">STTP numeric ID number, from measurement key.</param>
     /// <returns><see cref="MeasurementRecord"/> for specified <paramref name="signalID"/>.</returns>
-    public MeasurementRecord LookupMetadata(Guid signalID)
+    public MeasurementRecord LookupMetadata(Guid signalID, string source = "", ulong id = 0L)
     {
         MeasurementRecord? record = MetadataCache.FindMeasurement(signalID);
-
+        
         if (record is not null)
             return record;
 
-        record = new() { SignalID = signalID };
+        record = new() { SignalID = signalID, Source = source, ID = id };
         MetadataCache.AddMeasurementRecord(record);
         return record;
     }
@@ -480,8 +482,14 @@ public class DataSubscriber
             }
             catch (Exception ex)
             {
+                DispatchErrorMessage($"Exception while disconnecting data subscriber UDP data channel: {ex.Message}");
             }
         }
+
+        if (m_dataChannelResponseThread is not null && m_dataChannelResponseThread.IsAlive)
+            m_dataChannelResponseThread.Join();
+
+        m_disconnecting = false;
     }
 
     /// <summary>
@@ -500,12 +508,93 @@ public class DataSubscriber
 
     private void Disconnect(bool joinThread, bool autoReconnecting)
     {
+        Thread? disconnectThread;
 
+        // Check if disconnect thread is running or subscriber has already disconnected
+        if (m_disconnecting)
+        {
+            if (!autoReconnecting && !m_disconnected)
+                m_connector.Cancel();
+            
+            lock (m_disconnectThreadMutex)
+                disconnectThread = m_disconnectThread;
+
+            if (joinThread && !m_disconnected && disconnectThread is not null && disconnectThread.IsAlive)
+                disconnectThread.Join();
+
+            return;
+        }
+
+        // Notify running threads that the subscriber is disconnecting, i.e., disconnect thread is active
+        m_disconnecting = true;
+        m_connected = false;
+        m_subscribed = false;
+
+        disconnectThread = new(() => RunDisconnectThread(autoReconnecting)) { Name = "DisconnectThread" };
+
+        lock (m_disconnectThreadMutex)
+        {
+            disconnectThread.Start();
+            m_disconnectThread = disconnectThread;
+        }
+
+        if (joinThread && disconnectThread.IsAlive)
+            disconnectThread.Join();
     }
 
-    private void RunDisconnectThread()
+    private void RunDisconnectThread(bool autoReconnecting)
     {
+        // Let any pending connect operation complete before disconnect - prevents destruction disconnect before connection is completed
+        if (!autoReconnecting)
+        {
+            m_connector.Cancel();
 
+            Thread? connectionTerminationThread;
+
+            lock (m_connectionTerminationThreadMutex)
+                connectionTerminationThread = m_connectionTerminationThread;
+
+            if (connectionTerminationThread is not null && connectionTerminationThread.IsAlive)
+                connectionTerminationThread.Join();
+
+            Monitor.Enter(m_connectActionMutex);
+        }
+
+        // Release queues and close sockets so that threads can shut down gracefully
+        if (m_commandChannelSocket is not null)
+        {
+            try
+            {
+                m_commandChannelSocket.Shutdown(SocketShutdown.Both);
+                m_commandChannelSocket.Close();
+            }
+            catch (Exception ex)
+            {
+                DispatchErrorMessage($"Exception while disconnecting data subscriber TCP command channel: {ex.Message}");
+            }
+        }
+
+        if (m_dataChannelSocket is not null)
+        {
+            try
+            {
+                m_dataChannelSocket.Shutdown(SocketShutdown.Both);
+                m_dataChannelSocket.Close();
+            }
+            catch (Exception ex)
+            {
+                DispatchErrorMessage($"Exception while disconnecting data subscriber UDP data channel: {ex.Message}");
+            }
+        }
+
+        // Join with all threads to guarantee their completion before returning control to the caller
+        if (m_commandChannelResponseThread is not null && m_commandChannelResponseThread.IsAlive)
+            m_commandChannelResponseThread.Join();
+
+        if (m_dataChannelResponseThread is not null && m_dataChannelResponseThread.IsAlive)
+            m_dataChannelResponseThread.Join();
+
+        // Notify consumers of disconnect
     }
 
     private void DispatchConnectionTerminated()

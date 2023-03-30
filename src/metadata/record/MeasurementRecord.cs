@@ -48,14 +48,19 @@ namespace sttp.metadata.record
         public double Adder { get; init; } = 0.0D;
 
         /// <summary>
-        /// 
+        /// Gets the multiplicative value modifier. Allows for linear value adjustment. Defaults to one.
         /// </summary>
         public double Multiplier { get; init; } = 1.0D;
 
         /// <summary>
-        /// Gets the multiplicative value modifier. Allows for linear value adjustment. Defaults to one.
+        /// Gets the STTP numeric ID number (from measurement key) for this <see cref="MeasurementRecord"/>.
         /// </summary>
         public ulong ID { get; init; }
+
+        /// <summary>
+        /// Gets the STTP source instance (from measurement key) for this <see cref="MeasurementRecord"/>.
+        /// </summary>
+        public string Source { get; init; } = string.Empty;
 
         /// <summary>
         /// Gets the signal type name for this `MeasurementRecord`, e.g., "FREQ".
